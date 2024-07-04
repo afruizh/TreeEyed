@@ -3,12 +3,30 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to my_test_doc's documentation!
+TreeEyed Documentation
 =======================================
+
+TreeEyed is a QGIS plugin and python API to leverage AI models for tree monitoring in remote sensing imagery.
+
+
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Basics
+
+   pages/page_installation
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Examples
+
+   examples/example_simple_analysis
+
+
 
 
 
