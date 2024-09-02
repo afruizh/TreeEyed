@@ -1,0 +1,4 @@
+CREDITS
+
+Source code modified from HighResCanopyHeight repository
+https://github.com/facebookresearch/HighResCanopyHeight

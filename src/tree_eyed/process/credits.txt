@@ -1,0 +1,11 @@
+CREDITS
+
+forest.png
+https://www.flaticon.com/free-icons/forest
+Forest icons created by Freepik - Flaticon
+
+icon.png
+res/tree64.png
+https://www.flaticon.com/free-icons/tree
+Tree icons created by Gajah Mada - Flaticon
+

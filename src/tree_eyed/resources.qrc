@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/plugins/tree_eyed" >
+        <file>icon.png</file>
+        <file>forest.png</file>
+        <file>logo.png</file>
+    </qresource>
+</RCC>
