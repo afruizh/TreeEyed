@@ -1,0 +1,4 @@
+﻿Model,Source,Preferred spatial resolution
+HighResCanopyHeight,https://github.com/facebookresearch/HighResCanopyHeight,1 m
+Mask R-CNN,Custom trained,4.77 m
+Deepforest,https://github.com/weecology/DeepForest,less than 0.5 m

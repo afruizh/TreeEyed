@@ -7,6 +7,7 @@
   <title>Installation &mdash; TreeEyed  documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=19f00094" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=579b06ec" />
 
   
     <link rel="shortcut icon" href="../_static/icon.png"/>
@@ -22,7 +23,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Simple Analysis" href="../examples/example_simple_analysis.html" />
+    <link rel="next" title="Downloading models" href="page_download_models.html" />
     <link rel="prev" title="TreeEyed Documentation" href="../index.html" /> 
 </head>
 
@@ -45,18 +46,20 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">Basics</span></p>
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Installation</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#requirements">Requirements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#plugin-installation">Plugin installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#api-installation">API Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#required-additional-packages">Required additional packages</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#installation-video">Installation video</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="page_download_models.html">Downloading models</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<p class="caption" role="heading"><span class="caption-text">QuickStart</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../examples/example_simple_analysis.html">Simple Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/example_simple_analysis.html">Simple Inference</a></li>
 </ul>
 
         </div>
@@ -87,14 +90,37 @@
 <h1>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h1>
 <section id="requirements">
 <h2>Requirements<a class="headerlink" href="#requirements" title="Link to this heading"></a></h2>
+<p>You need to have installed <a class="reference external" href="https://www.qgis.org">QGIS</a> in your computer.
+This plugin was tested on Windows using QGIS 3.28.9-Firenze.</p>
 </section>
 <section id="plugin-installation">
 <h2>Plugin installation<a class="headerlink" href="#plugin-installation" title="Link to this heading"></a></h2>
-<p>For the QGIS plugin installation</p>
+<p>For the QGIS plugin installation follow the next steps:</p>
+<ol class="arabic simple">
+<li><p>Download the latest zip file of the plugin available in the <a class="reference external" href="https://github.com/afruizh/TreeEyed/releases">repository</a>.</p></li>
+<li><p>In QGIS open the <strong>Plugins Manager</strong></p></li>
+<li><p>Go to the <strong>Install from ZIP</strong> section and install the plugin using the zip file</p></li>
+<li><p>A message to install additional packages may appear, click yes to install</p></li>
+</ol>
 </section>
-<section id="api-installation">
-<h2>API Installation<a class="headerlink" href="#api-installation" title="Link to this heading"></a></h2>
+<section id="required-additional-packages">
+<h2>Required additional packages<a class="headerlink" href="#required-additional-packages" title="Link to this heading"></a></h2>
+<p>This plugin requires additional python packages that can be installed by using the plugin and following the instructions:</p>
+<ul class="simple">
+<li><p>rasterio</p></li>
+<li><p>pycocotools</p></li>
+<li><p>torch</p></li>
+<li><p>torchvision</p></li>
+<li><p>opencv-python</p></li>
+<li><p>deepforest</p></li>
+</ul>
+<p>A <strong>dependencies</strong> folder with the required packages will be added in the plugin root folder.</p>
 </section>
+<section id="installation-video">
+<h2>Installation video<a class="headerlink" href="#installation-video" title="Link to this heading"></a></h2>
+<div style="text-align:center;width:100%;">
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/h6xQASCDE_M?si=QVFi7gYWH0nFyuOD" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+</div></section>
 </section>
 
 
@@ -102,7 +128,7 @@
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="../index.html" class="btn btn-neutral float-left" title="TreeEyed Documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../examples/example_simple_analysis.html" class="btn btn-neutral float-right" title="Simple Analysis" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="page_download_models.html" class="btn btn-neutral float-right" title="Downloading models" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
