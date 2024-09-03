@@ -6,9 +6,9 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'my_test_doc'
-copyright = '2024, Andrés Felipe Ruiz Hurtado'
-author = 'Andrés Felipe Ruiz Hurtado'
+project = 'TreeEyed'
+copyright = '2024, Andrés Felipe Ruiz-Hurtado, Tropical Forages - CIAT'
+author = 'Andrés Felipe Ruiz-Hurtado, Tropical Forages - CIAT'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -25,3 +25,5 @@ exclude_patterns = []
 
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
+
+html_favicon = 'res/icon.png'

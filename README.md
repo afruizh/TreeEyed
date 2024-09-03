@@ -14,7 +14,7 @@ Apart from the model handling this plugin facilitates the integration with QGIS 
 
 ## Installation
 
-* Install using Plugin manager
+<!-- * Install using Plugin manager -->
 * Download zip file and install using Plugin Manager in QGIS
 
 
@@ -22,12 +22,13 @@ Apart from the model handling this plugin facilitates the integration with QGIS 
 
 ## Documentation
 
-Documentantion and tutorials are available here.
+Documentantion and tutorials are available [here](https://treeeyed.readthedocs.io/en/latest/).
 
 ## License
+This repository is licensed under the Apache 2.
 
 ## Authors
-Andres Felipe Ruiz-Hurtado
+Andrés Felipe Ruiz-Hurtado, Tropical Forages - CIAT
 
 <!-- ## TODO -->
 

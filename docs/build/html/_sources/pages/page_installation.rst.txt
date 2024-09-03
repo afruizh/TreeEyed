@@ -9,7 +9,7 @@ Requirements
 Plugin installation
 ===================
 
-For the QGOS plugin installation
+For the QGIS plugin installation
 
 ===================
 API Installation
