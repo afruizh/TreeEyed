@@ -2,7 +2,7 @@
 A QGIS plugin for tree monitoring using AI.
 
 ## Features
-This plugins seeks to integrate existing and custom AI models for tree monitoring (semantic segmentation, instance segmentation, and object detection).
+This plugins seeks to integrate existing and custom AI models for tree monitoring (semantic segmentation, instance segmentation, and object detection) in **RGB imagery**.
 
 Apart from the model handling this plugin facilitates the integration with QGIS layers for image extraction and post-processing. Additional features for dataset creation and validation in COCO format are available. 
 
@@ -33,7 +33,7 @@ A **dependencies** folder with the required packages will be added in the plugin
 
 
 ## License
-This repository is licensed under the Apache 2.0.
+This repository is licensed under the Apache 2.0 license.
 
 ## Authors
 Andrés Felipe Ruiz-Hurtado, Tropical Forages - CIAT
