@@ -40,7 +40,7 @@ class InstallerManager():
 
         self.packages = [#'deepforest'
                     'gdown'
-                    ,'rasterio'
+                    ,'rasterio==1.3.10' ## version 1.3.11 generates bug
                     , 'pycocotools'
                     , 'torch'
                     , 'torchvision'

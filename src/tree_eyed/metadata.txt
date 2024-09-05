@@ -23,7 +23,7 @@ about=
     -deepforest
     -HighResCanopyHeight
 
-tracker=https://treeeyed.readthedocs.io/en/latest/
+tracker=https://github.com/afruizh/TreeEyed/issues
 repository=https://github.com/afruizh/TreeEyed
 # End of mandatory metadata
 
