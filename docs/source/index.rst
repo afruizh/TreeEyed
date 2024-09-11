@@ -17,7 +17,7 @@ TreeEyed is a QGIS plugin to leverage AI models for tree monitoring using remote
 ==================
 Features
 ==================
-This plugins seeks to integrate existing and custom AI models for tree monitoring (semantic segmentation, instance segmentation, and object detection) in **RGB imagery**.
+This plugins seeks to integrate existing and custom AI models for tree monitoring (semantic segmentation, instance segmentation, and object detection) in **high resolution RGB imagery**.
 
 Apart from the model handling this plugin facilitates the integration with QGIS layers for image extraction and post-processing. Additional features for dataset creation and validation in COCO format are available.  
 
