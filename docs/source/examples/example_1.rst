@@ -55,7 +55,7 @@ In particular the important characteristic is:
 ..      - .. image:: ../res/2-3-2023-crop3.png
 ..      - .. image:: ../res/2-3-2023-crop4.png
 
-| The images can be downloaded here:
+| The images can be downloaded `here <https://github.com/afruizh/TreeEyed/blob/documentation/examples/images/input_raster/example_1.tif>`_.
 
 ===================
 Configuration

@@ -26,7 +26,7 @@ For this example we will use this image of a silvopastoral system.
 
 .. image:: ../res/input_raster_png/example_2.png
 
-| The images can be downloaded here:
+| The images can be downloaded `here <https://github.com/afruizh/TreeEyed/blob/documentation/examples/images/input_raster/example_2.tif>`_.
 
 ===================
 Configuration
