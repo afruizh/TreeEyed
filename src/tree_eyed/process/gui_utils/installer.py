@@ -154,7 +154,7 @@ class InstallerTask(QgsTask):
     def finished(self, result):
 
         if result:
-            QgsMessageLog.logMessage("Installation successful!",MESSAGE_CATEGORY, Qgis.Success)
+            QgsMessageLog.logMessage("Installation successful! \nPlease restart QGIS application to be able to use TreeEyed plugin.",MESSAGE_CATEGORY, Qgis.Success)
             print("reloading")
             qgis.utils.reloadPlugin("tree_eyed")
         else:
