@@ -1,6 +1,6 @@
 from qgis.utils import iface
 from .config import *
-
+from qgis.PyQt.QtWidgets import QDockWidget, QTabWidget, QWidget
 
 def qgis_utils_get_layer_dims(layer):
 
@@ -53,3 +53,20 @@ def qgis_utils_valid_dims(xRes, yRes):
     
     return True
     
+def qgis_utils_show_log_messages_panel(show = True, tab_title = "Tree Eyed Plugin"):
+    """
+    Shows and raises the Log Messages Panel in QGIS, and optionally switches 
+    to a specific tab if it exists.
+    """
+
+    for x in iface.mainWindow().findChildren(QDockWidget):
+        if x.objectName() == 'MessageLog':
+            x.setVisible(show)
+            if show:
+                x.raise_()
+                for tabwidget in x.findChildren(QTabWidget):
+                    #print(tabwidget.objectName())
+                    for index in range(tabwidget.count()):
+                        #print(tabwidget.tabText(index))
+                        if (tabwidget.tabText(index) == tab_title):
+                            tabwidget.setCurrentIndex(index)

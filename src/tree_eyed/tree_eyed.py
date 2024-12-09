@@ -1117,6 +1117,9 @@ class TreeEyed:
             
             if os.path.exists(save_model_dir):
 
+                # Open log messages
+                qgis_utils_show_log_messages_panel()
+
                 # Run download
                 model_downloader_task = ModelDownloaderTask("Tree Eyed downloading models", save_model_dir)
                 QgsApplication.taskManager().addTask(model_downloader_task)

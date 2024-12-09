@@ -30,6 +30,8 @@ from qgis.core import (
 
 from qgis.core import Qgis
 
+from .qgis_utils import *
+
 class InstallerManager():
 
     def __init__(self):
@@ -187,6 +189,9 @@ def check_packages(iface):
     ret = msg.exec()
 
     if ret == QMessageBox.Yes:
+
+        # Open log messages
+        qgis_utils_show_log_messages_panel()
         
         QgsMessageLog.logMessage("Installing additional packages", MESSAGE_CATEGORY, Qgis.Warning)
         
