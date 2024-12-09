@@ -7,6 +7,11 @@ Requirements
 You need to have installed `QGIS <https://www.qgis.org>`_ in your computer.
 This plugin was tested on Windows using QGIS 3.28.9-Firenze.
 
+.. csv-table:: QGIS versions and operating systems tested
+   :file: ../res/qgis_versions.csv
+   :align: center
+   :header-rows: 1
+
 ===================
 Plugin installation
 ===================
