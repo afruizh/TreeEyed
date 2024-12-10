@@ -263,6 +263,7 @@ class QGIS2COCO():
                     #"area": mask.sum().item(),
                     "bbox": bbox,
                     #"score": score,
+                    "iscrowd":0
                 }
                 ann_count = ann_count+1
 
@@ -279,7 +280,8 @@ class QGIS2COCO():
         coco_dataset.dataset["categories"] = categories
 
         # Save the COCO dataset as a JSON file
-        file_annotations = os.path.join(self.path_annotations,"annotations.json" )
+        #file_annotations = os.path.join(self.path_annotations,"annotations.json" )
+        file_annotations = os.path.join(self.path_annotations,"instances_.json" )
         #coco_dataset.save(file_annotations)
 
         with open(file_annotations, "w") as f:
