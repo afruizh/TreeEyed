@@ -48,6 +48,7 @@ class InstallerManager():
                     , 'torchvision'
                     , 'opencv-python'
                     , 'deepforest'
+                    , 'scikit-learn'
                     ]
         
         self.packages_import = [#'deepforest'
@@ -58,6 +59,7 @@ class InstallerManager():
                     , 'torchvision'
                     , 'cv2'
                     , 'deepforest'
+                    , 'sklearn'
                     ]
 
         #self.packages = ["pycocotools"]
