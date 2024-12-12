@@ -30,6 +30,8 @@ from qgis.core import (
 
 from qgis.core import Qgis
 
+from .qgis_utils import *
+
 class InstallerManager():
 
     def __init__(self):
@@ -46,6 +48,7 @@ class InstallerManager():
                     , 'torchvision'
                     , 'opencv-python'
                     , 'deepforest'
+                    , 'scikit-learn'
                     ]
         
         self.packages_import = [#'deepforest'
@@ -56,6 +59,7 @@ class InstallerManager():
                     , 'torchvision'
                     , 'cv2'
                     , 'deepforest'
+                    , 'sklearn'
                     ]
 
         #self.packages = ["pycocotools"]
@@ -154,7 +158,7 @@ class InstallerTask(QgsTask):
     def finished(self, result):
 
         if result:
-            QgsMessageLog.logMessage("Installation successful!",MESSAGE_CATEGORY, Qgis.Success)
+            QgsMessageLog.logMessage("Installation successful! \nPlease restart QGIS application to be able to use TreeEyed plugin.",MESSAGE_CATEGORY, Qgis.Success)
             print("reloading")
             qgis.utils.reloadPlugin("tree_eyed")
         else:
@@ -187,6 +191,9 @@ def check_packages(iface):
     ret = msg.exec()
 
     if ret == QMessageBox.Yes:
+
+        # Open log messages
+        qgis_utils_show_log_messages_panel()
         
         QgsMessageLog.logMessage("Installing additional packages", MESSAGE_CATEGORY, Qgis.Warning)
         

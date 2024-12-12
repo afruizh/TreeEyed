@@ -419,6 +419,11 @@ class HRCHInference():
                     max_value = np.max(cv_im0)
                     value = self.hrch_threshold*max_value
                     cv_im = (cv_im0 > value)*255
+
+                    # Temporal fox for white squares detection
+                    if value < 0.01:
+                        cv_im = cv_im*0
+
                     final_img[y:y2, x:x2] = cv_im[0:y2-y,0:x2-x]
 
                     

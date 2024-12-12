@@ -46,6 +46,55 @@ def get_transform(train):
     transforms.append(T.ToPureTensor())
     return T.Compose(transforms)
 
+def find_and_remove_solid_shapes(binary_image, solidity_threshold=0.9):
+    # Find contours of all shapes
+    contours, _ = cv.findContours(binary_image, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    
+    # Create a mask for solid shapes
+    solid_shapes_mask = np.zeros_like(binary_image)
+    
+    for cnt in contours:
+        # Compute contour area and convex hull area
+        area = cv.contourArea(cnt)
+        if area > 0:  # Avoid division by zero
+            hull = cv.convexHull(cnt)
+            hull_area = cv.contourArea(hull)
+            if hull_area > 0:
+                solidity = area / hull_area
+                
+                # Check if the shape meets the solidity threshold
+                if solidity >= solidity_threshold:
+                    cv.drawContours(solid_shapes_mask, [cnt], -1, 255, thickness=cv.FILLED)
+    
+    # Remove solid shapes from the binary image
+    remaining_shapes = cv.bitwise_and(binary_image, cv.bitwise_not(solid_shapes_mask))
+    
+    return solid_shapes_mask, remaining_shapes
+
+def iterative_closing(binary_image, kernel_size=(5, 5)):
+    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, kernel_size)
+    final_result = np.zeros_like(binary_image)  # To store all full shapes over iterations
+
+    remaining_shapes = binary_image.copy()
+
+    max_count = 100
+    count = 0
+    
+    while (count < max_count and np.any(remaining_shapes)):  # Stop when the image is completely black
+        # Find and remove full shapes
+        full_shapes_mask, remaining_shapes = find_and_remove_solid_shapes(remaining_shapes)
+        
+        # Add full shapes to the final result
+        final_result = cv.bitwise_or(final_result, full_shapes_mask)
+        
+        # Close the remaining shapes
+        remaining_shapes = cv.morphologyEx(remaining_shapes, cv.MORPH_CLOSE, kernel)
+
+        count = count + 1
+        print(count)
+    
+    return final_result
+
 class MaskRCNNTreeInference():    
     
     def __init__(self, parameters, models_dir, path_img):
@@ -160,6 +209,15 @@ class MaskRCNNTreeInference():
 
         result_mask = result_mask.permute(1, 2, 0)
         result_mask = result_mask.numpy()
+
+
+        # Post process
+        # Correct shapes
+        # Apply the iterative closing process
+        result_mask = cv.cvtColor(result_mask, cv.COLOR_RGB2GRAY)
+        kernel_size = (8,8)  # Adjust based on the image
+        result_mask = iterative_closing(result_mask, kernel_size)
+        result_mask = cv.cvtColor(result_mask, cv.COLOR_GRAY2RGB)
 
 
         if extent is not None:

@@ -49,6 +49,9 @@ from qgis.core import Qgis
 
 #from qgis.analysis import QgsZonalStatistics
 
+from qgis.core import QgsCoordinateTransform
+from qgis.core import QgsCoordinateReferenceSystem
+
 from .process.gui_utils.config import *
 from .process.gui_utils.qgis_utils import *
 
@@ -751,15 +754,24 @@ class TreeEyed:
             layer = parameters["layer"]
             img = None
 
-            extent = parameters["extent"]
+            extent = layer.extent()
             espg = parameters["extent_crs"].authid()
             
             layer_path = layer.dataProvider().dataSourceUri()
             
             img = cv.imread(layer_path)
-            
 
-            return
+            #Correct extent
+            # Create a QgsCoordinateTransform object
+            crs_source = layer.crs()  # The source CRS of the layer
+            crs_destination = QgsCoordinateReferenceSystem("EPSG:4326")  # The destination CRS
+            transform = QgsCoordinateTransform(crs_source, crs_destination, QgsProject.instance())
+
+            # Transform the extent to EPSG:4326
+            extent_transformed = transform.transformBoundingBox(extent)
+
+            extent = extent_transformed
+
         elif extent_type == "Custom extent":
 
             layer = parameters["layer"]
@@ -1116,6 +1128,9 @@ class TreeEyed:
             save_model_dir = str(QFileDialog.getExistingDirectory(self.iface.mainWindow(), "Select Directory"))
             
             if os.path.exists(save_model_dir):
+
+                # Open log messages
+                qgis_utils_show_log_messages_panel()
 
                 # Run download
                 model_downloader_task = ModelDownloaderTask("Tree Eyed downloading models", save_model_dir)

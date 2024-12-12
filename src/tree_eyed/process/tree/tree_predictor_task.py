@@ -192,6 +192,9 @@ class TreePredictorTask(QgsTask):
         print("Using model", self.model_name)
 
         temp_raster = os.path.join(parameters["output_path"],DEFAULT_TEMP_RASTER)
+        # Inlcude if parameters already have temp_raster parameter
+        if 'temp_raster' in parameters:
+            temp_raster = parameters['temp_raster']
 
         # Save current raster
         if extent is not None and not temp_already_saved:
@@ -445,7 +448,9 @@ class TreePredictorTask(QgsTask):
         df_tree_polygons_test = pd.DataFrame()
         tree_bb = []
 
-        (contours, hierarchy) = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+        #(contours, hierarchy) = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+        # Improve shape extraction
+        (contours, hierarchy) = cv.findContours(thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
         count = 0
         for index,contour in enumerate(list(contours)):
@@ -482,6 +487,10 @@ class TreePredictorTask(QgsTask):
                     for item in polygon_object.geoms:
                         if isinstance(item, shapely.geometry.polygon.Polygon):
                             polygons.append(item)
+                        elif isinstance(item, shapely.geometry.multipolygon.MultiPolygon): #include multipolygons
+                            polygons.append(item)
+                elif isinstance(polygon_object, shapely.geometry.multipolygon.MultiPolygon):#include multipolygons
+                    polygons.append(polygon_object)
                 else:
                     print(type(polygon_object))
 
