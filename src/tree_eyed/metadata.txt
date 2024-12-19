@@ -6,7 +6,7 @@
 name=TreeEyed
 qgisMinimumVersion=3.0
 description=TreeEyed is a QGIS plugin for tree monitoring using AI.
-version=0.1
+version=0.1.1
 author=Andrés Felipe Ruiz-Hurtado, Tropical Forages - CIAT 
 email=a.f.ruiz@cgiar.org, anfruizhu@unal.edu.co
 
