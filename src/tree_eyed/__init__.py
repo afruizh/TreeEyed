@@ -22,8 +22,10 @@ def classFactory(iface):  # pylint: disable=invalid-name
     """
 
     # check packages
-    from .process.gui_utils import installer
-    res = installer.check_packages(iface)
+    #from .process.gui_utils import installer
+    #res = installer.check_packages(iface)
+
+    res = True
 
     # Load main class of the plugin
     if res:

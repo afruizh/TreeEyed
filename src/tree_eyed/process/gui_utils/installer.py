@@ -4,6 +4,8 @@ from threading import Thread
 import importlib
 import requests
 
+from qgis.utils import iface
+
 from qgis.PyQt import QtCore, uic
 from qgis.PyQt.QtCore import pyqtSignal
 from qgis.PyQt.QtGui import QCloseEvent
@@ -40,13 +42,15 @@ class InstallerManager():
         self.python_command = "python"
         self.install_dir = os.path.join(self.plugin_dir, "dependencies")
 
+        self.task_manager = QgsApplication.taskManager() # Solve bug not running first time?
+
         self.packages = [#'deepforest'
                     'gdown'
                     ,'rasterio==1.3.10' ## version 1.3.11 generates bug
                     , 'pycocotools'
                     , 'torch'
                     , 'torchvision'
-                    , 'opencv-python'
+                    , 'opencv-python==4.10.0'
                     , 'deepforest'
                     , 'scikit-learn'
                     ]
@@ -95,28 +99,60 @@ class InstallerManager():
         if self.install_dir not in sys.path:
             sys.path.append(self.install_dir)  # TODO: check for a less intrusive way to do this
 
-        try:
+        
 
-            for package in self.packages_import:
+        packages_import_list = self.packages_import.copy()
+
+
+        new_packages_import = []
+        new_packages = []
+
+        res = True
+
+        for index, package in enumerate(packages_import_list):
+
+            try:
+                print(package)
                 importlib.import_module(package)
 
-        except Exception as e:
-            #print("Dependencies could not be imported")
-            #print(e)
-            QgsMessageLog.logMessage("Dependencies could not be imported",MESSAGE_CATEGORY, Qgis.Critical)
-            QgsMessageLog.logMessage(str(e),MESSAGE_CATEGORY, Qgis.Critical)
-            return False
+                # self.packages_import.pop(count)
+                # self.packages.pop(count)
+
+            except Exception as e:
+
+                new_packages_import.append(self.packages_import[index])
+                new_packages.append(self.packages[index])
+
+                print("Dependencies could not be imported")
+                print(e)
+                QgsMessageLog.logMessage("Dependencies could not be imported",MESSAGE_CATEGORY, Qgis.Critical)
+                QgsMessageLog.logMessage(str(e),MESSAGE_CATEGORY, Qgis.Critical)
+                #return False
+                res = False
+
+
         
-        return True
+        self.packages = new_packages
+        self.packages_import = new_packages_import
+
+        print(self.packages)
+        print(self.packages_import)
+
+        return res
 
 MESSAGE_CATEGORY = 'Tree Eyed Plugin'
 
 class InstallerTask(QgsTask):
+    finished_signal = pyqtSignal(bool)
 
-    def __init__(self, description):
+    def __init__(self, description, installer_manager = None):
         super().__init__(description, QgsTask.CanCancel)
 
+        self.installer_manager = installer_manager
+
     def run(self):
+
+        self.setProgress(5)
 
         #self.setProgress(10)
 
@@ -126,7 +162,13 @@ class InstallerTask(QgsTask):
         
 
         #, f'--target={PACKAGES_INSTALL_DIR}'
-        im = InstallerManager()
+        if self.installer_manager is None:
+            im = InstallerManager()
+        else:
+            im = self.installer_manager
+
+        
+
         cmds = im.get_install_commands()
 
         for index,cmd in enumerate(cmds):
@@ -153,21 +195,33 @@ class InstallerTask(QgsTask):
 
         self.setProgress(100)
 
+        self.finished_signal.emit(True)
+
         return True
 
     def finished(self, result):
 
-        if result:
-            QgsMessageLog.logMessage("Installation successful! \nPlease restart QGIS application to be able to use TreeEyed plugin.",MESSAGE_CATEGORY, Qgis.Success)
-            print("reloading")
-            qgis.utils.reloadPlugin("tree_eyed")
-        else:
-            # QgsMessageLog.logMessage(
-            #         'RandomTask "{name}" Exception: {exception}'.format(
-            #             name=self.description(),
-            #             exception=self.exception),
-            #         MESSAGE_CATEGORY, Qgis.Critical)
-            QgsMessageLog.logMessage("Installation was not successful!",MESSAGE_CATEGORY, Qgis.Critical)
+        print("finished")
+
+        # if result:
+        #     QgsMessageLog.logMessage("Installation successful! \nPlease restart QGIS application to be able to use TreeEyed plugin.",MESSAGE_CATEGORY, Qgis.Success)
+            
+        #     msg = QMessageBox(iface.mainWindow())
+        #     msg.setWindowTitle("Tree Eyed")
+        #     msg.setWindowModality
+        #     msg.setText("Installation successful! \nPlease restart QGIS application to be able to use TreeEyed plugin.")
+        #     msg.setIcon(QMessageBox.Information)
+
+
+        #     print("reloading")
+        #     qgis.utils.reloadPlugin("tree_eyed")
+        # else:
+        #     # QgsMessageLog.logMessage(
+        #     #         'RandomTask "{name}" Exception: {exception}'.format(
+        #     #             name=self.description(),
+        #     #             exception=self.exception),
+        #     #         MESSAGE_CATEGORY, Qgis.Critical)
+        #     QgsMessageLog.logMessage("Installation was not successful!",MESSAGE_CATEGORY, Qgis.Critical)
 
 
     def cancel(self):
@@ -176,7 +230,7 @@ class InstallerTask(QgsTask):
 
 def check_packages(iface):
 
-    QgsMessageLog.logMessage("checking packages",MESSAGE_CATEGORY, Qgis.Warning)
+    QgsMessageLog.logMessage("checking packages",MESSAGE_CATEGORY, Qgis.Info)
 
     im = InstallerManager()
     if im.check_imports():
@@ -198,8 +252,9 @@ def check_packages(iface):
         QgsMessageLog.logMessage("Installing additional packages", MESSAGE_CATEGORY, Qgis.Warning)
         
         # Run install
-        installer_task = InstallerTask('Tree Eyed installing python packages')
-        QgsApplication.taskManager().addTask(installer_task)
+        installer_task = InstallerTask('Tree Eyed installing python packages', im)
+        installer_task.finished_signal.connect(installer_finished)
+        im.task_manager.addTask(installer_task)
         QgsMessageLog.logMessage("Installing additional packages started", MESSAGE_CATEGORY, Qgis.Warning)
 
         return False
@@ -209,3 +264,28 @@ def check_packages(iface):
         QgsMessageLog.logMessage("Installing additional packages canceled",MESSAGE_CATEGORY, Qgis.Warning)
         
         return False
+    
+def installer_finished(result):
+
+
+    if result:
+        QgsMessageLog.logMessage("Installation successful! \nPlease restart QGIS application to be able to use TreeEyed plugin.",MESSAGE_CATEGORY, Qgis.Success)
+
+        msg = QMessageBox(qgis.utils.iface.mainWindow())
+        msg.setWindowTitle("Tree Eyed")
+        msg.setText("Installation successful! \n\nPlease restart QGIS application.")
+        msg.setIcon(QMessageBox.Information)
+        #msg.setStandardButtons(QMessageBox.Yes|QMessageBox.No)
+        ret = msg.exec()
+
+        qgis.utils.reloadPlugin("tree_eyed")
+    else:
+        # QgsMessageLog.logMessage(
+        #         'RandomTask "{name}" Exception: {exception}'.format(
+        #             name=self.description(),
+        #             exception=self.exception),
+        #         MESSAGE_CATEGORY, Qgis.Critical)
+        QgsMessageLog.logMessage("Installation was not successful!",MESSAGE_CATEGORY, Qgis.Critical)
+
+
+
