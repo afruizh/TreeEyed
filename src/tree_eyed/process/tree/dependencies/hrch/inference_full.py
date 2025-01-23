@@ -30,6 +30,8 @@ os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 from qgis.core import Qgis
 from qgis.core import QgsMessageLog
 
+MIN_CUDA_MEM = 8000000000
+
 def np2tif_2(data, filepath_tif, filepath_output, output_dtype=rio.uint8):
 
     # Load original tif file and copy metadata
@@ -87,7 +89,10 @@ class SSLModule(pl.LightningModule):
             self.chm_module_ = SSLAE(classify=True, huge=False).eval()
         
         if 'compressed' in ssl_path:   
-            ckpt = torch.load(ssl_path, map_location='cpu')
+            device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+            if device == torch.device('cuda:0') and torch.cuda.get_device_properties(0).total_memory < MIN_CUDA_MEM:
+                device = torch.device('cpu')
+            ckpt = torch.load(ssl_path, map_location=device)
             self.chm_module_ = torch.quantization.quantize_dynamic(
                 self.chm_module_, 
                 {torch.nn.Linear,torch.nn.Conv2d,  torch.nn.ConvTranspose2d},
@@ -200,9 +205,11 @@ class HRCHInference():
         self.model = []
         self.norm = []
         self.model_norm = []
-        self.device = "cpu"
+        #self.device = "cpu"
         #self.device = "cuda:0"
-        #self.device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
+        self.device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
+        if self.device == torch.device('cuda:0') and torch.cuda.get_device_properties(0).total_memory < MIN_CUDA_MEM:
+            self.device = torch.device('cpu')
 
         self.img_result_binary = None
         self.hrch_type = parameters["hrch_type"]
