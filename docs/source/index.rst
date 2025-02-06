@@ -3,6 +3,15 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
+.. image:: res/logos/Banner_TreeEyed.png
+   :alt: Plugin Installation
+
+.. raw:: html
+
+   <p align="center">
+      <h1 align="center">TreeEyed QGIS Plugin</h1>
+   </p>
+
 Home
 ======
 
@@ -31,6 +40,39 @@ Available models:
 * `HighResCanopyHeight <https://github.com/facebookresearch/HighResCanopyHeight>`_
 * Custom Mask-RCNN
 * `DeepForest <https://github.com/weecology/DeepForest>`_
+
+==================
+Authors
+==================
+
+Tropical Forages Team
+
+Alliance Bioversity International & CIAT
+
+==================
+Research
+==================
+
+   A. F. Ruiz-Hurtado, J. P. Bolaños, D. A. Arrechea-Castillo, and J. A. Cardoso, ‘TreeEyed: A QGIS plugin for tree monitoring in silvopastoral systems using state of the art AI models’, SoftwareX, vol. 29, p. 102071, Feb. 2025, `doi: 10.1016/j.softx.2025.102071 <https://www.sciencedirect.com/science/article/pii/S235271102500038X>`_.
+
+   Citation (Bibtex format):
+
+.. code-block:: RST
+
+   @article{ruiz-hurtadoTreeEyedQGISPlugin2025,
+   title = {{{TreeEyed}}: {{A QGIS}} Plugin for Tree Monitoring in Silvopastoral Systems Using State of the Art {{AI}} Models},
+   author = {{Ruiz-Hurtado}, Andres Felipe and Bola{\~n}os, Juliana Perez and {Arrechea-Castillo}, Darwin Alexis and Cardoso, Juan Andres},
+   year = {2025},
+   month = feb,
+   journal = {SoftwareX},
+   volume = {29},
+   pages = {102071},
+   issn = {2352-7110},
+   doi = {10.1016/j.softx.2025.102071},
+   keywords = {Computer vision,Deep learning,QGIS,Remote sensing,Silvopastoral systems,Tree monitoring},
+   }
+
+
 
 ----
 
