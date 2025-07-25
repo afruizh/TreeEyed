@@ -1,6 +1,6 @@
 # Documentation
 
-This documentatoin was created using sphinx for readthedocs.
+This documentation was created using sphinx for readthedocs.
 
 Requirements:
 ```

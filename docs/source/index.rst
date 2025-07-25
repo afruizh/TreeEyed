@@ -40,12 +40,25 @@ Available models:
 * `HighResCanopyHeight <https://github.com/facebookresearch/HighResCanopyHeight>`_
 * Custom Mask-RCNN
 * `DeepForest <https://github.com/weecology/DeepForest>`_
+* `VHRTrees <https://github.com/RSandAI/VHRTrees>`_
+
+==================
+Acknowledgment
+==================
+
+This work is being carried out as part of the CGIAR Initiatives and Funded Projects. CGIAR is a global research partnership for a food-secure future. Its science is carried out by 15 Research Centers in close collaboration with hundreds of partners across the globe.
+
+TreeEyed is an open source project, and we welcome contributions and feedback from the community.  
+We would like to extend our gratitude to the developers and maintainers of the libraries and models integrated into this plugin
 
 ==================
 Authors
 ==================
 
-Tropical Forages Team
+.. image:: res/logos/tf_small.png
+   :alt: Plugin Installation
+
+Tropical Forages Program
 
 Alliance Bioversity International & CIAT
 

@@ -1,4 +1,5 @@
-﻿Model,Source,Preferred spatial resolution
-HighResCanopyHeight,https://github.com/facebookresearch/HighResCanopyHeight,1 m
-Mask R-CNN,Custom trained,4.77 m
-Deepforest,https://github.com/weecology/DeepForest,less than 0.5 m
+﻿Model,Source,Preferred spatial resolution,Computer Vision Task
+HighResCanopyHeight,https://github.com/facebookresearch/HighResCanopyHeight,1 m,Pixel-wise Regression
+Mask R-CNN,Custom trained,4.77 m,Instance Segmentation
+Deepforest,https://github.com/weecology/DeepForest,less than 0.5 m,Object Detection
+VHRTrees,https://github.com/RSandAI/VHRTrees,0.5 m,Object Detection
