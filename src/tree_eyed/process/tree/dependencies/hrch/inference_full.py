@@ -192,7 +192,9 @@ class HRCHInference():
 
         #self.base_path = r"D:\local_mydata\models\trees\HighResCanopyHeight"
         
-        self.models_dir = models_dir
+        self.models_dir = parameters["model_dir"]
+        self.path_img = parameters["input_raster_path"]
+        
         #self.temp_dir = temp_dir
         
         #self.base_path = HRCH_PATH
@@ -229,7 +231,7 @@ class HRCHInference():
         print("Using " + self.args_checkpoint)
 
 
-        self.path_img = path_img
+        
 
 
         #self.path_img_output = "D:/local_mydata/tree/results/vector/result_raster_output.tif"
@@ -271,6 +273,20 @@ class HRCHInference():
         # 3- image normalization for each image going through the encoder
         self.norm = T.Normalize((0.420, 0.411, 0.296), (0.213, 0.156, 0.143))
         self.norm = self.norm.to(self.device)
+
+    def update(self, parameters):
+
+        self.parameters = parameters
+        self.models_dir = parameters["model_dir"]
+        self.path_img = parameters["input_raster_path"]
+
+        self.img_result_binary = None
+
+        self.output_files = []
+
+        self.path_img_output = parameters["output_path"] + "/" + parameters["prefix"] + "_raster.tif"
+        
+        self.hrch_threshold = parameters["hrch_threshold"]
 
     def evaluate2(self, model, 
              norm, 

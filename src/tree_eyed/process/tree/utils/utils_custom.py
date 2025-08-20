@@ -6,7 +6,7 @@ import os
 import cv2 as cv
 #import json
 #from PIL import Image
-import geopandas as gpd
+#import geopandas as gpd
 
 import shapely
 
@@ -119,6 +119,7 @@ def raster_extract(raster_filepath, extent, epsg, filepath):
                    , extent.xMaximum()
                    , extent.yMaximum())
         
+        import geopandas as gpd
         gdf = gpd.GeoDataFrame(geometry=[geom])
         gdf = gdf.set_crs(epsg=epsg.replace("EPSG:",""))
         gdf = gdf.to_crs(crs=src.crs)

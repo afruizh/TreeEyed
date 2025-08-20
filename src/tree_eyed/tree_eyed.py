@@ -6,8 +6,11 @@ from qgis.PyQt.QtWidgets import QAction
 # Initialize Qt resources from file resources.py
 from .resources import *
 
+from qgis.core import QgsApplication
+
 # Import the code for the DockWidget
 from .tree_eyed_dockwidget import TreeEyedDockWidget
+from .tree_eyed_provider import TreeEyedProvider
 import os.path
 
 import os
@@ -42,6 +45,7 @@ class TreeEyed:
             application at run time.
         :type iface: QgsInterface
         """
+        self.provider = None
         # Save reference to the QGIS interface
         self.iface = iface
 
@@ -79,8 +83,12 @@ class TreeEyed:
         self.dockwidget = None
 
         self.tree_eyed_processor = None
-        
 
+
+    def initProcessing(self):
+        """Init Processing provider for QGIS >= 3.8."""
+        self.provider = TreeEyedProvider()
+        QgsApplication.processingRegistry().addProvider(self.provider)
 
 
     # noinspection PyMethodMayBeStatic
@@ -175,18 +183,57 @@ class TreeEyed:
 
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
+        self.initProcessing()
 
-        icon_path = ':/plugins/tree_eyed/icon.png'
+        # Add toolbar button for the pluing
+        icon_path = ':/plugins/tree_eyed/res/icon.png'
         self.add_action(
             icon_path,
             text=self.tr(u'Tree Eyed'),
             callback=self.run,
             parent=self.iface.mainWindow())
+        
+        # # Add toolbar butotn for the processing provider
+        # icon_path = ':/plugins/tree_eyed/res/icon_black.png'
+        # icon = QIcon(icon_path)
+        # action = QAction(icon, "Simple Inference", self.iface.mainWindow())
+        # action.triggered.connect(self.run_simple_inference)
+        # self.toolbar.addAction(action)
+
+        icon_path = ':/plugins/tree_eyed/res/icon_black.png'
+        self.add_action(
+            icon_path,
+            text=self.tr(u"Simple Inference"),
+            callback=self.run_simple_inference,
+            parent=self.iface.mainWindow()
+        )
+
+        # Add Settings action to the menu
+        icon_path = ':/plugins/tree_eyed/res/icon.png'
+        self.add_action(
+            icon_path,
+            text=self.tr(u"Settings"),
+            callback=self.open_settings_dialog,
+            add_to_toolbar=False,
+            parent=self.iface.mainWindow()
+        )
+
+    def open_settings_dialog(self):
+        """Open the settings dialog from the dockwidget."""
+        # If dockwidget exists and has settings dialog, use it; otherwise, create a temporary one
+        from .tree_eyed_dockwidget import TreeEyedDockWidget
+        if self.dockwidget is not None:
+            self.dockwidget._open_settings()
+        else:
+            self.run()  # Ensure the dockwidget is created
+            self.dockwidget._open_settings()
+
+        
 
     #--------------------------------------------------------------------------
 
     def onClosePlugin(self):
-        """Cleanup necessary items here when plugin dockwidget is closed"""
+        """Cleanup necessary items here when plugin dockwidget is closed"""        
 
         #print "** CLOSING TreeEyed"
 
@@ -204,6 +251,7 @@ class TreeEyed:
 
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
+        QgsApplication.processingRegistry().removeProvider(self.provider)
 
         #print "** UNLOAD TreeEyed"
 
@@ -241,6 +289,7 @@ class TreeEyed:
             # Check if install packages
             from .process.gui_utils import installer
             res = installer.check_packages(self.iface)
+            #res = True
 
             if not res:
                 self.pluginIsActive = False
@@ -264,6 +313,10 @@ class TreeEyed:
 
     #--------------------------------------------------------------------------
     # Additional functions
+
+    def run_simple_inference(self):
+        from qgis import processing
+        processing.execAlgorithmDialog('TreeEyed:simple_inference')
 
 
     

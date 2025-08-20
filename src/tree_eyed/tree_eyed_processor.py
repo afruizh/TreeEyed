@@ -1,3 +1,4 @@
+import os
 # Additional imports
 import qgis
 #from qgis.core import QgsCoordinateTransform
@@ -30,6 +31,7 @@ from qgis.core import (
 #  , QgsTaskManager
   , QgsApplication
   , QgsMessageLog
+  , QgsStyle
 )
 
 from qgis.core import Qgis
@@ -42,14 +44,14 @@ from qgis.core import QgsCoordinateReferenceSystem
 from .process.gui_utils.config import *
 from .process.gui_utils.qgis_utils import *
 
-from .process.tree.metrics.compare import COCOMetrics
+#from .process.tree.metrics.compare import COCOMetrics
 
 from time import sleep
 import random
 MESSAGE_CATEGORY = 'Tree Eyed Plugin'
 
-from .process.tree.utils.utils_custom import *
-from .process.tree.qgis2coco.qgis2coco import *
+# from .process.tree.utils.utils_custom import *
+# from .process.tree.qgis2coco.qgis2coco import *
 
 from pathlib import Path
 
@@ -58,13 +60,59 @@ from pathlib import Path
 import cv2 as cv
 import numpy as np
 import glob
-from .process.tree.tree_predictor_task import TreePredictorTask
 
-import gdown
+#from .process.tree.interface.processor import Processor
+from .process.tree.interface.processor import Processor
 
 DEFAULT_RASTER_COLORMAP = "colormap.txt"
 DEFAULT_VECTOR_BB = "detection_style.qml"
 DEFAULT_TEMP_RASTER = "_tree_eyed_temp_raster.tif"
+
+from qgis.PyQt.QtCore import pyqtSignal
+
+class WorkerTask(QgsTask):
+
+    # Additional signals
+    task_finished = pyqtSignal(dict)
+
+    def __init__(self, description, params):
+        super().__init__(description, QgsTask.CanCancel)
+        self.params = params
+
+    def _handle_progress(self, info):
+        self.setProgress(info["progress"]*100)
+
+    def run(self):
+        """Long-running task."""
+
+        processor = Processor(self.params
+                              , progress_callback = self._handle_progress
+                              , interruption_check = self.isCanceled)
+        results = processor.run()
+
+        #QgsMessageLog.logMessage("Inference process started", MESSAGE_CATEGORY, Qgis.Warning)
+
+        print("***RESULT")
+        print(results)
+
+        if results["status"] == "error":
+
+            QgsMessageLog.logMessage(results["status"]+ " " + results["message"],MESSAGE_CATEGORY, Qgis.Critical)
+            return False
+        
+
+        self.task_finished.emit(results)
+
+        return True
+
+    def finished(self, result):
+
+        if not result:
+            iface.messageBar().pushMessage("Error", "Task could not be completed", level=Qgis.Critical)
+        else:
+            iface.messageBar().pushMessage("Finished", self.description() + " completed", level=Qgis.Success)
+        
+        return  
 
 class TreeEyedProcessor:
 
@@ -194,7 +242,9 @@ class TreeEyedProcessor:
 
         # img = self._capture_canvas(parameters["layer"], visible=True)
         model_dir = self._get_models_dir()
-        
+
+
+        from .process.tree.tree_predictor_task import TreePredictorTask
         tree_predictor_task = TreePredictorTask("Tree predictor task", model_dir, parameters, img, extent, epsg, temp_already_saved = False)
 
         tree_predictor_task.output_dir = parameters["output_path"]
@@ -249,6 +299,7 @@ class TreeEyedProcessor:
         
         if os.path.exists(validate_ground_truth) and os.path.exists(validate_prediction):
         
+            from .process.tree.metrics.compare import COCOMetrics
             coco_metrics = COCOMetrics()
             coco_metrics.load_target(validate_ground_truth, result_type='coco')
             coco_metrics.load_pred(validate_prediction, result_type='coco')
@@ -292,37 +343,37 @@ class TreeEyedProcessor:
             if ".tif" in file:
                 layer = QgsRasterLayer(file, name_stem)
                 
-                t_image = cv.imread(file)
-                max_value = np.max(t_image)
-                config_debug("max_value", max_value)
                 
 
-                #https://docs.qgis.org/3.34/en/docs/pyqgis_developer_cookbook/raster.html
-                fcn = QgsColorRampShader()
-                fcn.setColorRampType(QgsColorRampShader.Interpolated)
-                color_ramp_load = QgsRasterRendererUtils.parseColorMapFile(DEFAULT_RASTER_COLORMAP)
-                #lst = [ QgsColorRampShader.ColorRampItem(0, QColor(0,255,0)),
-                #    QgsColorRampShader.ColorRampItem(255, QColor(255,255,0))]
-                lst0 = color_ramp_load[1]
+                # config_debug("max_value", max_value)
                 
-                color0 = lst0[0].color
-                color1 = lst0[1].color
-                config_debug("colors")
-                config_debug(color0.red(), color0.green(), color0.blue(), color0.alpha())
-                config_debug(color1.red(), color1.green(), color1.blue(), color1.alpha())
-                
-                color = QColor(19,222,222,255)
-                
-                lst = []
-                lst.append(lst0[0])
-                lst.append(QgsColorRampShader.ColorRampItem(max_value,color,lst0[1].label))
 
-                fcn.setColorRampItemList(lst)
-                shader = QgsRasterShader()
-                shader.setRasterShaderFunction(fcn)                
+                # #https://docs.qgis.org/3.34/en/docs/pyqgis_developer_cookbook/raster.html
+                # fcn = QgsColorRampShader()
+                # fcn.setColorRampType(QgsColorRampShader.Interpolated)
+                # color_ramp_load = QgsRasterRendererUtils.parseColorMapFile(DEFAULT_RASTER_COLORMAP)
+                # #lst = [ QgsColorRampShader.ColorRampItem(0, QColor(0,255,0)),
+                # #    QgsColorRampShader.ColorRampItem(255, QColor(255,255,0))]
+                # lst0 = color_ramp_load[1]
                 
-                renderer = QgsSingleBandPseudoColorRenderer(layer.dataProvider(), 1, shader)
-                layer.setRenderer(renderer)
+                # color0 = lst0[0].color
+                # color1 = lst0[1].color
+                # config_debug("colors")
+                # config_debug(color0.red(), color0.green(), color0.blue(), color0.alpha())
+                # config_debug(color1.red(), color1.green(), color1.blue(), color1.alpha())
+                
+                # color = QColor(19,222,222,255)
+                
+                # lst = []
+                # lst.append(lst0[0])
+                # lst.append(QgsColorRampShader.ColorRampItem(max_value,color,lst0[1].label))
+
+                # fcn.setColorRampItemList(lst)
+                # shader = QgsRasterShader()
+                # shader.setRasterShaderFunction(fcn)                
+                
+                # renderer = QgsSingleBandPseudoColorRenderer(layer.dataProvider(), 1, shader)
+                # layer.setRenderer(renderer)
 
 
                 if not layer.isValid():
@@ -330,6 +381,40 @@ class TreeEyedProcessor:
                 else:
                     QgsProject.instance().addMapLayer(layer)
                     layers.append(layer)
+
+                    t_image = cv.imread(file,cv.IMREAD_UNCHANGED)
+                    min_value = np.min(t_image)
+                    max_value = np.max(t_image)
+
+
+                    # Add color ramp to layer using default color ramp
+                    rocket_ramp = QgsStyle().defaultStyle().colorRamp('Viridis')
+
+                    # Sample colors at intervals (for smooth ramp, use more steps)
+                    steps = 50
+                    items = []
+                    for i in range(steps + 1):
+                        value = min_value + (max_value - min_value) * i / steps
+                        color = rocket_ramp.color(i / steps)
+                        if i == 0:
+                            color.setAlpha(0)
+                        color_item = QgsColorRampShader.ColorRampItem(value, color, str(value))
+                        items.append(color_item)
+
+                    shader_func = QgsColorRampShader()
+                    shader_func.setColorRampType(QgsColorRampShader.Interpolated)
+                    shader_func.setColorRampItemList(items)
+
+                    shader = QgsRasterShader()
+                    shader.setRasterShaderFunction(shader_func)
+
+                    renderer = QgsSingleBandPseudoColorRenderer(layer.dataProvider(), 1, shader)
+                    renderer.setClassificationMin(min_value)
+                    renderer.setClassificationMax(max_value)
+                    layer.setRenderer(renderer)
+                    layer.triggerRepaint()
+
+
             elif ".shp" in file:
                 #layer = QgsVectorLayer(file, "results", "ogr")
                 layer = QgsVectorLayer(file, name_stem)
@@ -416,7 +501,7 @@ class TreeEyedProcessor:
         if parameters['task'] == "capture":
             #print("NOT IMPLEMENTED")
 
-            img = self._capture_canvas(parameters["layer"], visible=True)
+            img = self._capture_canvas(parameters["layer"], visible=True, white_background = False)
 
             img_bgr = img
 
@@ -426,6 +511,8 @@ class TreeEyedProcessor:
             epgs = self.iface.mapCanvas().mapSettings().destinationCrs().authid()
 
             capture_raster = os.path.join(parameters["output_path"],"capture_raster.tif")
+
+            parameters["is_temporal"] = True
 
             # Save current raster
             if extent is not None:
@@ -439,11 +526,18 @@ class TreeEyedProcessor:
 
             image_path = parameters["input_image"].dataProvider().dataSourceUri()
             annotations_path = parameters["annotations"].dataProvider().dataSourceUri()
-            num_tiles = parameters["num_tiles"]
+            num_tiles = parameters["num_tiles"] # now it would be max pixels per tile
+            overlap = int(parameters["overlap"])/100.0
+            output_format = "." + parameters["output_format"].lower()
             
             dir_name = parameters["prefix"] + "_coco_dataset"
             
             path_output = os.path.join(parameters["output_path"], dir_name)
+
+
+            parameters["image_path"] = image_path
+            parameters["annotations_path"] = annotations_path
+
 
             #Check if already exist
             if os.path.exists(path_output):
@@ -454,8 +548,45 @@ class TreeEyedProcessor:
                 msg.show()
                 return
 
-            exporter = QGIS2COCO(image_path, annotations_path)
-            exporter.convert(path_output, num_tiles, 1.0)
+            qgstask = WorkerTask("Export dataset task", parameters)
+            QgsApplication.taskManager().addTask(qgstask)            
+
+            # #from .process.tree.qgis2coco.qgis2coco import QGIS2COCO
+            # from .process.tree.qgis2coco.qgis2coco import QGIS2COCO
+            # from .process.tree.qgis2coco.qgis2coco import check_raster
+
+            # print("HEHEHE")
+            # print(image_path)
+
+            # metadata_final = check_raster(image_path)
+            # w = metadata_final["width"]
+            # h = metadata_final["height"]
+
+            # max_px = num_tiles
+
+            # rows = 1
+
+            # if (w > max_px or h > max_px):
+
+            #     max_val = max(metadata_final["width"], metadata_final["height"])
+            #     rows = np.ceil((max_val-overlap*max_px)/(max_px*(1-overlap)))
+
+            # COCO_CONTRIBUTOR = "TreeEyed Plugin | Tropical Forages Program | Alliance Bioversity International & CIAT"
+            # COCO_LICENSE = "Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)"
+            # COCO_LICENSE_URL = "https://creativecommons.org/licenses/by-nc/4.0/"
+            # COCO_INFORMATION = ""
+
+            # exporter = QGIS2COCO(image_path
+            #         , annotations_path
+            #         , allow_clipped_annotations = False
+            #         , allow_no_annotations = False
+            #         , information = COCO_INFORMATION
+            #         , license = COCO_LICENSE
+            #         , license_url = COCO_LICENSE_URL
+            #         , contributor = COCO_CONTRIBUTOR
+            #         , output_format = output_format
+            #         )
+            # exporter.convert(path_output, rows = rows, overlap = overlap)
 
             return
         
@@ -491,7 +622,7 @@ class TreeEyedProcessor:
         if not valid_dims:
             msg = QMessageBox(self.iface.mainWindow())
             msg.setWindowTitle("Tree Eyed")
-            msg.setText("Current extent dimensions ({}x{}) are too big for processing.\nSmaller dimensions are recommended. Do you want still want to process?".format(resx,resy))
+            msg.setText("Current extent dimensions ({}x{}) are too big for processing.\nSmaller dimensions are recommended. Do you still want to process?".format(resx,resy))
             msg.setIcon(QMessageBox.Warning)
             msg.setStandardButtons(QMessageBox.Yes|QMessageBox.No)
             ret = msg.exec()          
@@ -506,17 +637,34 @@ class TreeEyedProcessor:
 
         temp_already_saved = False
 
+        input_raster_path = None
+
         if extent_type == "Current View":
             # if capture canvas 
-            img = self._capture_canvas(parameters["layer"])
+            img = self._capture_canvas(parameters["layer"], white_background = False)
             #img = self._capture_canvas(parameters["layer"], visible=True) # to save
 
-            img_bgr = img
+            from .process.tree.interface.cachemanager import CacheManager
+            cache_manager = CacheManager(project_path = parameters["output_path"])
+            cache_dir = cache_manager.get_cache_folder()
+
+            temp_raster = cache_manager.get_temp_raster_path()
+            input_raster_path = temp_raster
+
+            #img_bgr = img
 
             img = cv.cvtColor(img, cv.COLOR_RGBA2RGB)
 
             extent = self.iface.mapCanvas().extent()
-            espg = self.iface.mapCanvas().mapSettings().destinationCrs().authid()
+            epsg = self.iface.mapCanvas().mapSettings().destinationCrs().authid()
+
+            from .process.tree.utils.utils_custom import np2tif_extent
+
+            np2tif_extent(img, extent, epsg, temp_raster)
+
+            parameters['temp_raster'] = temp_raster
+
+            parameters["is_temporal"] = True
 
             print(img.shape)
             
@@ -526,9 +674,10 @@ class TreeEyedProcessor:
             img = None
 
             extent = layer.extent()
-            espg = parameters["extent_crs"].authid()
+            epgs = parameters["extent_crs"].authid()
             
             layer_path = layer.dataProvider().dataSourceUri()
+            input_raster_path = layer_path
             
             img = cv.imread(layer_path)
 
@@ -549,13 +698,14 @@ class TreeEyedProcessor:
             img = None
 
             extent = parameters["extent"]
-            espg = parameters["extent_crs"].authid()
+            epsg = parameters["extent_crs"].authid()
 
             
             layer_path = layer.dataProvider().dataSourceUri()
             temp_raster = os.path.join(parameters["output_path"],DEFAULT_TEMP_RASTER)
+            input_raster_path = temp_raster
 
-            raster_extract(layer_path, extent, espg, temp_raster)
+            raster_extract(layer_path, extent, epsg, temp_raster)
 
             img = cv.imread(temp_raster)
             #img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
@@ -566,7 +716,7 @@ class TreeEyedProcessor:
             if not valid_dims:
                 msg = QMessageBox(self.iface.mainWindow())
                 msg.setWindowTitle("Tree Eyed")
-                msg.setText("Current extent dimensions ({}x{}) are too big for processing.\nSmaller dimensions are recommended. Do you want still want to process?".format(resx,resy))
+                msg.setText("Current extent dimensions ({}x{}) are too big for processing.\nSmaller dimensions are recommended. Do you still want to process?".format(resx,resy))
                 msg.setIcon(QMessageBox.Warning)
                 msg.setStandardButtons(QMessageBox.Yes|QMessageBox.No)
                 ret = msg.exec()          
@@ -584,12 +734,40 @@ class TreeEyedProcessor:
             # Read existing
             model_dir = self._get_models_dir()
 
+            parameters["model_dir"] = model_dir
+
             if model_dir != "NODATA":
             
-                tree_predictor_task = TreePredictorTask("Tree predictor task", model_dir, parameters, img, extent, espg, temp_already_saved = temp_already_saved)
-                QgsApplication.taskManager().addTask(tree_predictor_task)
-                QgsMessageLog.logMessage("Inference process started", MESSAGE_CATEGORY, Qgis.Warning)
-                tree_predictor_task.task_finished.connect(self._process_task_finished)
+                # tree_predictor_task = TreePredictorTask("Tree predictor task", model_dir, parameters, img, extent, espg, temp_already_saved = temp_already_saved)
+                # QgsApplication.taskManager().addTask(tree_predictor_task)
+                # QgsMessageLog.logMessage("Inference process started", MESSAGE_CATEGORY, Qgis.Warning)
+                # tree_predictor_task.task_finished.connect(self._process_task_finished)
+
+                # fix necessary 
+                parameters['task'] = "inference"
+                parameters['input_raster_path'] = input_raster_path
+
+                print()
+
+                minx = extent.xMinimum()
+                miny = extent.yMinimum()
+                maxx = extent.xMaximum()
+                maxy = extent.yMaximum()
+                bounds = (minx, miny, maxx, maxy)
+
+                parameters["extent_general"] = bounds
+                parameters['epsg'] = parameters["extent_crs"].authid()
+
+                parameters["output_files"] = []
+
+                print(parameters)
+
+
+
+
+                qgstask = WorkerTask("Tree inference task", parameters)
+                qgstask.task_finished.connect(self._process_task_finished)
+                QgsApplication.taskManager().addTask(qgstask)   
             
             else:
                 print("NO modeldir")
@@ -600,7 +778,7 @@ class TreeEyedProcessor:
             
         else:        
             # img_bgr = self.predictor.predict(parameters, img, extent, espg)
-            img_bgr = self.predictor.predict_with_parameters(parameters, img, extent, espg, temp_already_saved = temp_already_saved)
+            img_bgr = self.predictor.predict_with_parameters(parameters, img, extent, epsg, temp_already_saved = temp_already_saved)
 
             #save capture
             #img2 = self._capture_canvas(parameters["layer"], visible=True)
@@ -658,12 +836,12 @@ class TreeEyedProcessor:
         
         QgsMessageLog.logMessage("Processing successful!",MESSAGE_CATEGORY, Qgis.Success)
         
-        img_bgr = results["img"]
+        #img_bgr = results["img"]
         output_files = results["output_files"]
         output_path = results["output_path"]
 
-        print("_process_task_finished")
-        print(img_bgr)
+        #print("_process_task_finished")
+        #print(img_bgr)
         
         # #Visualize
         # window_name = "Inference"
@@ -675,8 +853,8 @@ class TreeEyedProcessor:
         # cv.imshow(window_name, img_bgr)
         # cv.waitKey(1)
 
-        print("output_files")
-        print(output_files)
+        #print("output_files")
+        #print(output_files)
 
         self._add_processed_layers(output_files)
 
@@ -928,11 +1106,19 @@ class TreeEyedProcessor:
         model = parameters["model"]
         
         models_dict = {
-            "Mask R-CNN":["MASKRCNNModel.pth"] #MASKRCNN
-            ,"HighResCanopyHeight": ["compressed_SSLlarge.pth" #SSLlarge
-            ,"compressed_SSLhuge_aerial.pth" #Huge Aerial
-            ,"aerial_normalization_quantiles_predictor.ckpt"] #normalization
-            ,"DeepForest": ["NEON.pt"]#Neon  
+            "Mask R-CNN":["MASKRCNNModel.onnx"] #MASKRCNN
+            ,"HighResCanopyHeight": [
+                                    "HRCH_model/HRCH_SSLhuge_satellite.onnx"
+                                    #"compressed_SSLlarge.pth" #SSLlarge
+                                    #,"compressed_SSLhuge_aerial.pth" #Huge Aerial
+                                    #,"aerial_normalization_quantiles_predictor.ckpt" #normalization
+                                    ] 
+            ,"DeepForest": [
+                           #"NEON.pt"
+                            "DeepForestModel.onnx"
+                            ]#Neon
+            , "VHRTrees": ["VHRTrees_best.onnx"]
+            , "Custom ONNX Model": []
         }
         
         required_files = models_dict[model]
@@ -1027,21 +1213,45 @@ class ModelDownloaderTask(QgsTask):
 
         self.dir_models = dir_models
 
-        # Hardcoded model urls
+        # # Hardcoded model urls
+        # self.urls = [
+        #     "https://drive.google.com/file/d/1TQtmmj8M3Slrs_zTaVyXJOKGEzZqq3VG/view?usp=drive_link" #MASKRCNN
+        #     ,"https://drive.google.com/file/d/191KeFSxNc-liH9eEn9pUmGgyF4q5VL1d/view?usp=drive_link" #SSLlarge
+        #     ,"https://drive.google.com/file/d/1ixyi9AB6S4Qawl4pPJaI3-2iijJGxoKA/view?usp=drive_link" #Huge Aerial
+        #     ,"https://drive.google.com/file/d/1yBM3pb4tKg5XSfPf77VGkTuKK39mYPO7/view?usp=drive_link" #normalization
+        #     ,"https://drive.google.com/file/d/1MzBhE5N6KVEKWc-_ryLn7fi7P6kiyn6e/view?usp=drive_link"#Neon  
+        # ]
+
+        # self.urls_names = [
+        #     "MASKRCNNModel.pth" #MASKRCNN
+        #     ,"compressed_SSLlarge.pth" #SSLlarge
+        #     ,"compressed_SSLhuge_aerial.pth" #Huge Aerial
+        #     ,"aerial_normalization_quantiles_predictor.ckpt" #normalization
+        #     ,"NEON.pt"#Neon  
+        # ]
+
+        # Hardcoded model urls for ONNX models
         self.urls = [
-            "https://drive.google.com/file/d/1TQtmmj8M3Slrs_zTaVyXJOKGEzZqq3VG/view?usp=drive_link" #MASKRCNN
-            ,"https://drive.google.com/file/d/191KeFSxNc-liH9eEn9pUmGgyF4q5VL1d/view?usp=drive_link" #SSLlarge
-            ,"https://drive.google.com/file/d/1ixyi9AB6S4Qawl4pPJaI3-2iijJGxoKA/view?usp=drive_link" #Huge Aerial
-            ,"https://drive.google.com/file/d/1yBM3pb4tKg5XSfPf77VGkTuKK39mYPO7/view?usp=drive_link" #normalization
-            ,"https://drive.google.com/file/d/1MzBhE5N6KVEKWc-_ryLn7fi7P6kiyn6e/view?usp=drive_link"#Neon  
-        ]
+            #"https://drive.google.com/drive/folders/1diJ5so9FjwFi45phV-NOnuuL_6Xdx80x?usp=drive_link" #HRCH ONNX
+             "https://drive.google.com/file/d/1JhpsEjglsmmlN0kNCRqp1xAXohUCc4Xm/view?usp=drive_link" #MASKRCNN ONNX
+            , "https://drive.google.com/file/d/17cpB49Sy1GNmkhFgSsuyRT_4Yx44nI0W/view?usp=drive_link" #DeepForest ONNX
+            , "https://drive.google.com/file/d/1cjrwD6SekWgXEhOGF9bRQuQ721_BKOEJ/view?usp=drive_link" #VHRTrees ONNX
+            ]
 
         self.urls_names = [
-            "MASKRCNNModel.pth" #MASKRCNN
-            ,"compressed_SSLlarge.pth" #SSLlarge
-            ,"compressed_SSLhuge_aerial.pth" #Huge Aerial
-            ,"aerial_normalization_quantiles_predictor.ckpt" #normalization
-            ,"NEON.pt"#Neon  
+            #"HRCH_model" #HRCH ONNX folder
+            "MASKRCNNModel.onnx" #MASKRCNN ONNX
+            ,"DeepForestModel.onnx" #DeepForest ONNX
+            , "VHRTrees_best.onnx" #VHRTrees ONNX
+        ]
+
+                # Hardcoded model urls for ONNX models
+        self.urls_folders = [
+            "https://drive.google.com/drive/folders/1diJ5so9FjwFi45phV-NOnuuL_6Xdx80x?usp=drive_link" #HRCH ONNX
+           ]
+
+        self.urls_folders_names = [
+            "HRCH_model" #HRCH ONNX folder
         ]
 
     def run(self):
@@ -1059,13 +1269,28 @@ class ModelDownloaderTask(QgsTask):
 
         for index,url in enumerate(self.urls):
 
-            step_progress = (index)*1.0/len(self.urls)*100
+            step_progress = (index)*1.0/(len(self.urls)+len(self.urls_folders))*100
             self.setProgress(step_progress)
 
             model_filepath = os.path.join(self.dir_models,self.urls_names[index])
             QgsMessageLog.logMessage("Downloading " + url+ " " + model_filepath,MESSAGE_CATEGORY, Qgis.Info)
+            import gdown
             if not os.path.exists(model_filepath):
                 gdown.download(url, output=model_filepath, fuzzy=True)
+
+            if self.isCanceled():
+                return False
+            
+        for index,url in enumerate(self.urls_folders):
+
+            step_progress = (index+len(self.urls))*1.0/(len(self.urls)+len(self.urls_folders))*100
+            self.setProgress(step_progress)
+
+            model_filepath = os.path.join(self.dir_models,self.urls_folders_names[index])
+            QgsMessageLog.logMessage("Downloading " + url+ " " + model_filepath,MESSAGE_CATEGORY, Qgis.Info)
+            import gdown
+            if not os.path.exists(model_filepath):
+                gdown.download_folder(url, output=model_filepath, quiet=False)
 
             if self.isCanceled():
                 return False
@@ -1094,7 +1319,6 @@ class ModelDownloaderTask(QgsTask):
         QgsMessageLog.logMessage('Package installation was canceled',MESSAGE_CATEGORY, Qgis.Info)
         super().cancel()
         
-    
         
         
 

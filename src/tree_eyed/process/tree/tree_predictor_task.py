@@ -13,7 +13,7 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
-from pycocotools.coco import COCO
+
 import shapely.geometry
 import pandas as pd
 import geopandas as gpd
@@ -31,9 +31,7 @@ from torchvision.io import read_image
 from torchvision.transforms import v2 as T
 from torchvision.utils import draw_bounding_boxes, draw_segmentation_masks
 
-from deepforest import main
-from deepforest import get_data
-from deepforest import utilities
+
 from collections import OrderedDict
 
 #import sys
@@ -132,7 +130,6 @@ from .dependencies.hrch.inference_full import HRCHInference
 DEFAULT_TEMP_RASTER = "_tree_eyed_temp_raster.tif"
 
 from qgis.core import QgsMessageLog
-
 
 class TreePredictorTask(QgsTask):
     
@@ -268,7 +265,11 @@ class TreePredictorTask(QgsTask):
 
             print("DeepForest")
 
-            model = main.deepforest()
+            #from deepforest import main
+
+            import deepforest
+
+            model = deepforest.main.deepforest()
             model.create_model()
             model_path = os.path.join(self.models_dir, "NEON.pt")
             #model_path =  r"D:\local_mydata\models\trees\deepforest\NEON.pt"
@@ -879,6 +880,7 @@ class TreePredictorTask(QgsTask):
                 coco_anns.append(ann)
 
         # Create COCO object and save results
+        from pycocotools.coco import COCO
         coco = COCO()
         coco.dataset = coco_dict["dataset"]
         coco.cats = coco_dict["categories"]

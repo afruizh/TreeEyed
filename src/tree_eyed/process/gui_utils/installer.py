@@ -34,6 +34,60 @@ from qgis.core import Qgis
 
 from .qgis_utils import *
 
+import pkg_resources
+
+def get_installed_packages():
+    return {dist.project_name.lower() for dist in pkg_resources.working_set}
+
+import re
+
+def normalize_package_name(req):
+    # Strip version specifiers like >=, ==, <=, etc.
+    return re.split(r'[<>=!~]+', req.strip())[0].lower()
+
+import subprocess
+
+def get_package_dependencies(package_name):
+    try:
+        
+        if "==" in package_name:
+            name, version = package_name.split("==")
+        else:
+            name, version = package_name, None
+
+        print(f"https://pypi.org/pypi/{name}/json")
+        response  = requests.get(f"https://pypi.org/pypi/{name}/json", timeout=10)    
+        response.raise_for_status()
+        data = response.json()
+
+        if not version:
+            version = data["info"].get("version")
+
+        requires = data["info"].get("requires_dist", [])
+        if not requires:
+            return []
+
+        return [r.split(";")[0].split()[0].lower() for r in requires if r]
+    except Exception as e:
+        print("Error:", e)
+        return []
+
+def get_missing_dependencies(package_name):
+    installed = get_installed_packages()
+    print("installed")
+    print(installed)
+    required = get_package_dependencies(package_name)
+    required_clean = [normalize_package_name(pkg) for pkg in required]
+    print("required")
+    print(required)
+    missing = [pkg for pkg in required_clean if pkg not in installed]
+    print("missing")
+    print(missing)
+    return missing
+    #return []
+
+
+
 class InstallerManager():
 
     def __init__(self):
@@ -41,33 +95,65 @@ class InstallerManager():
         self.plugin_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         self.python_command = "python"
         self.install_dir = os.path.join(self.plugin_dir, "dependencies")
+        self.install_dir = os.path.normpath(self.install_dir)
 
         self.task_manager = QgsApplication.taskManager() # Solve bug not running first time?
 
-        self.packages = [#'deepforest'
-                    'gdown'
-                    ,'rasterio==1.3.10' ## version 1.3.11 generates bug
-                    , 'pycocotools'
-                    , 'torch'
-                    , 'torchvision'
-                    , 'opencv-python==4.10.0'
-                    , 'deepforest'
-                    , 'scikit-learn'
-                    ]
+        # self.packages = [#'deepforest'
+        #             'gdown==5.2.0'
+        #             ,'rasterio==1.3.10' ## version 1.3.11 generates bug
+        #             , 'pycocotools==2.0.8'
+        #             , 'torch==2.5.1'
+        #             , 'torchvision==0.20.1'
+        #             #, 'opencv-python==4.10.0.84'
+        #             , 'opencv-python-headless==4.11'
+        #             , 'deepforest==1.4.1'
+        #             , 'scikit-learn==1.6.1'
+        #             ]
         
-        self.packages_import = [#'deepforest'
-                    'gdown'            
-                    ,'rasterio'
-                    , 'pycocotools'
-                    , 'torch'
-                    , 'torchvision'
-                    , 'cv2'
-                    , 'deepforest'
-                    , 'sklearn'
-                    ]
+        
+        
+        # self.packages_import = [#'deepforest'
+        #             'gdown'            
+        #             ,'rasterio'
+        #             , 'pycocotools'
+        #             , 'torch'
+        #             , 'torchvision'
+        #             , 'cv2'
+        #             , 'deepforest'
+        #             , 'sklearn'
+        #             ]
 
-        #self.packages = ["pycocotools"]
-        #self.packages_import = ["pycocotools"]
+        self.packages = [
+                        'gdown==5.2.0'
+                        #'pyproj==3.6.1'
+                        #,'pyarrow==15.0.2'
+                        #,'geopandas==0.14.4'
+                        ,'rasterio==1.4.3' #,'rasterio==1.3.9'
+                        ,'opencv-python-headless==4.11.0.86'
+                         #,'rasterio==1.3.10'
+                         , 'onnxruntime-gpu==1.22.0'
+                         , 'pycocotools==2.0.8'
+                         #, 'deepforest==1.4.1'                         
+                         #, 'torch==2.5.1'
+                         #, 'torchvision==0.20.1'
+                         ]
+        self.packages_import = [
+                                'gdown' 
+                                #'pyproj'
+                                #,'pyarrow'
+                                #,'geopandas'
+                                ,'rasterio'
+                                ,'cv2'
+                                #, 'rasterio'
+                                , 'onnxruntime'
+                                , 'pycocotools'
+                                #, 'deepforest'
+                                #, "torch"
+                                #, "tochvision"
+                                ]
+
+        #gdown
 
         return
     
@@ -76,7 +162,17 @@ class InstallerManager():
         cmds = []
 
         for package in self.packages:
-            cmd = [self.python_command, "-m", "pip", "install", f'--target={self.install_dir}']
+            cmd = [self.python_command, "-m", "pip", "install", "--no-deps", "--no-cache-dir", "--prefer-binary", f'--target={self.install_dir}']
+            #cmd = ["uv", "pip", "install", "--no-cache-dir", f'--target={self.install_dir}']
+            
+            if package in ["torch", "torchvision", 'torch==2.5.1', 'torchvision==0.20.1']:
+                cmd.append("--index-url")
+                cmd.append("https://download.pytorch.org/whl/cu118")
+
+            # install with dependencies
+            if package in ["onnxruntime-gpu==1.22.0", 'gdown==5.2.0']:
+                cmd = [self.python_command, "-m", "pip", "install", "--no-cache-dir", "--prefer-binary", f'--target={self.install_dir}']
+            
             cmd.append(package)
 
             cmds.append(cmd)
@@ -179,16 +275,74 @@ class InstallerTask(QgsTask):
             self.setProgress(step_progress)
 
             QgsMessageLog.logMessage(str(step_progress),MESSAGE_CATEGORY, Qgis.Info)
+
+            full_cmd = ' '.join(cmd)
+            QgsMessageLog.logMessage("If you encounter any trouble please open OsGeoW4 Shell and run the following command \"" + full_cmd + "\"",MESSAGE_CATEGORY, Qgis.Info)
+
+
+            # plugin_dir = os.path.dirname(im.install_dir)
+            # cwd_path = os.path.join(plugin_dir, 'dependencies', 'bin')
+            # cwd_path = os.path.normpath(cwd_path)
+            # print(cwd_path)
         
-            with subprocess.Popen(cmd, shell=True, stdout = subprocess.PIPE) as proc:
+            #with subprocess.Popen(cmd, shell=True, stdout = subprocess.PIPE, stderr=subprocess.STDOUT, cwd=cwd_path) as proc:
+            with subprocess.Popen(cmd, shell=True, stdout = subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
+                error_found = False
                 for line in proc.stdout:
+                    decoded_line = line.decode('utf-8', errors='replace').rstrip()
+                    print(decoded_line)
+                    #QgsMessageLog.logMessage(str(line),MESSAGE_CATEGORY, Qgis.Info)
+                    QgsMessageLog.logMessage(decoded_line,MESSAGE_CATEGORY, Qgis.Info)
 
-                    print(line)
-                    QgsMessageLog.logMessage(str(line),MESSAGE_CATEGORY, Qgis.Info)
-
+                    if any(keyword in decoded_line.lower() for keyword in ["error", "exception", "traceback", "failed"]):
+                        if "pip's dependency resolver does not currently" not in decoded_line.lower():
+                            error_found = True
 
                     if self.isCanceled():
                         return False
+
+                    if error_found:
+                        QgsMessageLog.logMessage("Error detected during installation.", MESSAGE_CATEGORY, Qgis.Critical)
+                        return False
+                    
+            missing_deps = get_missing_dependencies(cmd[-1])
+            for dep in missing_deps:
+
+                print(dep)
+
+                cmd_deps = ["python", "-m", "pip", "install", "--no-deps", "--no-cache-dir", "--prefer-binary", f'--target={im.install_dir}']
+                
+                if cmd[-1] in ["torch", "torchvision", 'torch==2.5.1', 'torchvision==0.20.1']:
+                    cmd_deps.append("--index-url")
+                    cmd_deps.append("https://download.pytorch.org/whl/cu118")
+                
+                cmd_deps.append(dep)
+
+                QgsMessageLog.logMessage(f"Installing dependencies for {cmd[-1]}",MESSAGE_CATEGORY, Qgis.Info)
+                QgsMessageLog.logMessage(str(cmd_deps),MESSAGE_CATEGORY, Qgis.Info)
+                full_cmd = ' '.join(cmd_deps)
+                QgsMessageLog.logMessage("If you encounter any trouble please open OsGeoW4 Shell and run the following command \"" + full_cmd + "\"",MESSAGE_CATEGORY, Qgis.Info)
+
+                with subprocess.Popen(cmd_deps, shell=True, stdout = subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
+                    error_found = False
+                    
+                    for line in proc.stdout:
+                        decoded_line = line.decode('utf-8', errors='replace').rstrip()
+                        print(decoded_line)
+                        #QgsMessageLog.logMessage(str(line),MESSAGE_CATEGORY, Qgis.Info)
+                        QgsMessageLog.logMessage(decoded_line,MESSAGE_CATEGORY, Qgis.Info)
+
+                        if any(keyword in decoded_line.lower() for keyword in ["error", "exception", "traceback", "failed"]):
+                            if "pip's dependency resolver does not currently" not in decoded_line.lower():
+                                error_found = True
+
+                        if self.isCanceled():
+                            return False
+
+                        if error_found:
+                            QgsMessageLog.logMessage("Error detected during installation.", MESSAGE_CATEGORY, Qgis.Critical)
+                            return False
+
 
             if self.isCanceled():
                 return False

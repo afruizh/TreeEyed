@@ -3,5 +3,10 @@
         <file>icon.png</file>
         <file>forest.png</file>
         <file>logo.png</file>
+        <file>logo.png</file>
+        <file>res/Banner TreeEyed.png</file>
+        <file>res/icon.png</file>
+        <file>res/icon_black.png</file>
+        <file>res/icon_name.png</file>
     </qresource>
 </RCC>

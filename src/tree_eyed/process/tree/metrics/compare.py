@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-from pycocotools.coco import COCO
+
 import numpy as np
 
 import torchmetrics
@@ -20,6 +20,7 @@ class ResultsDataset():
         self.path = None
 
         if self.result_type == 'coco':
+            from pycocotools.coco import COCO
             self.coco = COCO(path)
             self.path = path            
         elif self.result_type == 'folder':

@@ -38,7 +38,7 @@ tags=ai, tree, tree monitoring, dataset, validation, COCO, raster, vector, digit
 
 homepage=https://treeeyed.readthedocs.io/en/latest/
 category=Plugins
-icon=./res/tree64.png
+icon=./res/icon_name.png
 # experimental flag
 experimental=True
 

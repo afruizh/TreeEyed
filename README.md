@@ -1,6 +1,7 @@
 <p align="center">
   <img src="res/Banner TreeEyed.png" alt="banner">
   <h1 align="center">TreeEyed QGIS Plugin version 0.2.0</h1>
+  <p align=center>Download experimental release: <a href="TreeEyedExperimentalv0.2.0">TreeEyedExperimentalv0.2.0</a></a>
   <p align=center>Documentation: <a href="https://treeeyed.readthedocs.io/en/latest/">https://treeeyed.readthedocs.io/en/latest/</a></a>
 </p>
 
@@ -60,6 +61,17 @@ If you encounter issues while using the TreeEyed plugin, consider the following 
 - **General errors:** Review the QGIS Python Console for error messages and consult the [documentation](https://treeeyed.readthedocs.io/en/latest/) for further guidance.
 
 For unresolved issues, please open an issue on the [GitHub repository](https://github.com/your-repo/treeeyed/issues) with detailed information about your problem.
+
+## Roadmap
+
+Planned improvements for TreeEyed include:
+
+- [ ] Integration of additional AI models for tree monitoring.
+- [ ] Support for state-of-the-art models such as DinoV3.
+- [ ] Tree zonification features for spatial analysis.
+- [ ] Carbon stock estimation tools.
+
+Stay updated with progress and new features in the [documentation](https://treeeyed.readthedocs.io/en/latest/) and on the [GitHub repository](https://github.com/your-repo/treeeyed).
 
 ## License
 This repository is licensed under the Apache 2.0 license.
