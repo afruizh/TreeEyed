@@ -1,7 +1,7 @@
 <p align="center">
   <img src="res/Banner TreeEyed.png" alt="banner">
   <h1 align="center">TreeEyed QGIS Plugin version 0.2.0</h1>
-  <p align=center>Download experimental release: <a href="TreeEyedExperimentalv0.2.0">TreeEyedExperimentalv0.2.0</a></a>
+  <p align=center>Download experimental release: <a href="https://github.com/afruizh/TreeEyed/releases/tag/v0.2.0-experimental">TreeEyedExperimentalv0.2.0</a></a>
   <p align=center>Documentation: <a href="https://treeeyed.readthedocs.io/en/latest/">https://treeeyed.readthedocs.io/en/latest/</a></a>
 </p>
 
@@ -39,7 +39,7 @@ Documentantion and tutorials are available [here](https://treeeyed.readthedocs.i
 
 ## Requirements
 
-This plugin works on QGIS, and it was tested on Windows using QGIS 3.28.9-Firenze.
+This plugin works on QGIS, and it was tested on **Windows 11** using **QGIS 3.40.0-Bratislava**.
 
 It requires additional python packages that can be installed by using the plugin and following the installation instructions:
 
@@ -54,7 +54,7 @@ A **dependencies** folder with the required packages will be added in the plugin
 
 If you encounter issues while using the TreeEyed plugin, consider the following steps:
 
-- **Plugin not loading:** Ensure you are using a compatible QGIS version (tested on QGIS 3.28.9-Firenze).
+- **Plugin not loading:** Ensure you are using a compatible QGIS version.
 - **Missing dependencies:** Check that all required Python packages are installed. Use the plugin's installation instructions to install missing packages.
 - **Model loading errors:** Verify that the ONNX model files are correctly downloaded and placed in the expected directories.
 - **Image processing issues:** Confirm that your input imagery matches the required spatial resolution for the selected model.
@@ -109,7 +109,6 @@ We would like to extend our gratitude to the developers and maintainers of the l
 Tropical Forages Progam
 
 Alliance Bioversity International & CIAT
-
 
 <!-- ## TODO -->
 
