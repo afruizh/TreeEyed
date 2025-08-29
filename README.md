@@ -62,6 +62,38 @@ If you encounter issues while using the TreeEyed plugin, consider the following 
 
 For unresolved issues, please open an issue on the [GitHub repository](https://github.com/your-repo/treeeyed/issues) with detailed information about your problem.
 
+## Command Line Interface
+
+```
+conda create -n tree_eyed_env python=3.12
+conda activate tree_eyed_env
+pip install --no-cache-dir -r requirements.txt
+```
+
+```
+python src/tree_eyed/tree_eyed_app.py --config /app/data/example_01.json 
+```
+
+
+
+
+D:/local_mydata/treeeyed_tests/docker
+
+## Docker image
+
+```
+docker build -t treeeyed-image .
+```
+
+
+```
+docker run --gpus all -v D:/local_mydata/treeeyed_tests/docker:/app/data -v D:/local_mydata/models/treeeyed2:/app/models -it treeeyed-image
+```
+
+```
+python src/tree_eyed/tree_eyed_app.py --config /app/data/example_01.json 
+```
+
 ## Roadmap
 
 Planned improvements for TreeEyed include:
