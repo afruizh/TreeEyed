@@ -1,8 +1,9 @@
 <p align="center">
   <img src="res/Banner TreeEyed.png" alt="banner">
   <h1 align="center">TreeEyed QGIS Plugin version 0.2.0</h1>
-  <p align=center>Download experimental release: <a href="https://github.com/afruizh/TreeEyed/releases/tag/v0.2.0-experimental">TreeEyedExperimentalv0.2.0</a></a>
-  <p align=center>Documentation: <a href="https://treeeyed.readthedocs.io/en/latest/">https://treeeyed.readthedocs.io/en/latest/</a></a>
+  <p align=center><a href="https://github.com/afruizh/TreeEyed/releases/tag/v0.2.0-experimental">Download experimental release</a></a>
+  <p align=center><a href="https://treeeyed.readthedocs.io/en/latest/">Documentation</a></a>
+  <p align=center><a href="https://treeeyed.readthedocs.io/en/latest/">Discord</a></a>
 </p>
 
 
@@ -64,6 +65,8 @@ For unresolved issues, please open an issue on the [GitHub repository](https://g
 
 ## Command Line Interface
 
+To use TreeEyed functionality in CLI mode you need to create a python environment using:
+
 ```
 conda create -n tree_eyed_env python=3.12
 conda activate tree_eyed_env
@@ -71,15 +74,36 @@ pip install --no-cache-dir -r requirements.txt
 ```
 
 ```
-python src/tree_eyed/tree_eyed_app.py --config /app/data/example_01.json 
+conda install conda-forge::cudnn
+conda install conda-forge::libcufft
+conda install conda-forge::cuda-cudart
+```
+
+Additionally, you need to have the models in a local folder an a configuration file, for example a minimal configuration file `example_config.json` is:
+
+```
+{
+	"model": "HighResCanopyHeight"
+	, "model_dir": "path/to/models"
+	, "output_path": "path/to/output/folder"
+	, "prefix": "output_name"
+	, "input_raster_path": "path/to/input/raster"
+	, "task": "inference"
+	, "raster_outputs": ["grayscale"]
+	, "vector_outputs": [""]
+}
 ```
 
 
 
+```
+python src/tree_eyed/tree_eyed_app.py --config config.json 
+```
 
-D:/local_mydata/treeeyed_tests/docker
 
 ## Docker image
+
+You can also use TreeEyed 
 
 ```
 docker build -t treeeyed-image .

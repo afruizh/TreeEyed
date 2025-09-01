@@ -4,12 +4,16 @@ import signal
 
 from process.tree.interface.interface import Worker
 
+from PySide6.QtCore import QCoreApplication
+from PySide6.QtCore import QCoreApplication
+
 def progressUpdated(info):
 
     print(info["progress"]*100)
 
 def onProcessFinished(info):
-
+    print("Process finished")
+    QCoreApplication.quit()
     print("Process finished")
 
 def run_cli(args):
@@ -25,10 +29,11 @@ def run_cli(args):
     parameters = json.load(args.config)
     #print(parameters)
 
+    app = QCoreApplication([])
     worker = Worker(parameters)
 
     def handle_signal(signum, frame):
-        worker.stop()
+        worker.requestInterruption()
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
@@ -36,7 +41,7 @@ def run_cli(args):
     worker.finished.connect(onProcessFinished)
     worker.progressUpdated.connect(progressUpdated)
     worker.start()
-    worker.wait()
+    app.exec()
 
 if __name__ == "__main__":
 
