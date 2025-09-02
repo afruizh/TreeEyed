@@ -1068,12 +1068,36 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
 
             srcs = [rio.open(p) for p in results["tiles_processed"]]
 
-            mosaic, out_transform = merge(
-                srcs,
-                method="max",        # alternatives: "last", "min", "max", numpy.mean
-                nodata=srcs[0].nodata, # keeps NoData consistent
-                precision=10           # rounding in the affine transform (optional)
-            )
+
+            def batch_merge(tile_paths, batch_size=100):
+                mosaics = []
+                for i in range(0, len(tile_paths), batch_size):
+                    batch = tile_paths[i:i+batch_size]
+                    srcs = [rio.open(p) for p in batch]
+                    mosaic, out_transform = merge(srcs)
+                    for src in srcs:
+                        src.close()
+                    mosaics.append((mosaic, out_transform))
+                # Merge batch mosaics
+                srcs = [rio.io.MemoryFile().open(driver='GTiff', count=m.shape[0], height=m.shape[1], width=m.shape[2], dtype=m.dtype, transform=t) for m, t in mosaics]
+                final_mosaic, final_transform = merge(srcs)
+                for src in srcs:
+                    src.close()
+                return final_mosaic, final_transform
+
+            if len(srcs) > 100:
+
+                mosaic, out_transform = merge(srcs)
+
+            else:
+   
+
+                mosaic, out_transform = merge(
+                    srcs,
+                    method="max",        # alternatives: "last", "min", "max", numpy.mean
+                    nodata=srcs[0].nodata, # keeps NoData consistent
+                    precision=10           # rounding in the affine transform (optional)
+                )
 
             with rio.open(input_raster_path) as ref:
                 from rasterio.windows import from_bounds

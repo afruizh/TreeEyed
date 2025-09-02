@@ -32,8 +32,15 @@ def run_cli(args):
     app = QCoreApplication([])
     worker = Worker(parameters)
 
+    # Save original signal handlers
+    original_sigint = signal.getsignal(signal.SIGINT)
+    original_sigterm = signal.getsignal(signal.SIGTERM)
+
     def handle_signal(signum, frame):
         worker.requestInterruption()
+        # Restore original handlers so subsequent signals use default behavior
+        signal.signal(signal.SIGINT, original_sigint)
+        signal.signal(signal.SIGTERM, original_sigterm)
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
