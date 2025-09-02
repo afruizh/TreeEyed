@@ -47,8 +47,14 @@ def run_cli(args):
 
     worker.finished.connect(onProcessFinished)
     worker.progressUpdated.connect(progressUpdated)
-    worker.start()
-    app.exec()
+    try:
+        worker.start()
+        app.exec()
+    except Exception as e:
+        print(f"Exception occurred: {e}")
+        signal.signal(signal.SIGINT, original_sigint)
+        signal.signal(signal.SIGTERM, original_sigterm)
+        QCoreApplication.quit()
 
 if __name__ == "__main__":
 

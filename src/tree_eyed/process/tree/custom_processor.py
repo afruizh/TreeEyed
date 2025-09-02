@@ -841,14 +841,20 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
     tile_size = parameters.get("tile_size", 1024)
 
     model = parameters["model"]
-    if model == 'HighResCanopyHeight':
-        tile_size = 256
-    elif model == 'DeepForest':
-        tile_size = 400
-   # elif model == 'Mask R-CNN':
-    elif model == "VHRTrees":
-        tile_size = 960
-    # elif model == "Custom ONNX Model":
+
+    if not 'tile_size' in parameters:
+    
+        if model == 'HighResCanopyHeight':
+            tile_size = 256
+        elif model == 'DeepForest':
+            tile_size = 400
+    # elif model == 'Mask R-CNN':
+        elif model == "VHRTrees":
+            tile_size = 960
+        # elif model == "Custom ONNX Model":
+
+    else:
+        tile_size = parameters.get("tile_size", 1024)
 
     output_path = parameters["output_path"]
     prefix = parameters["prefix"]
@@ -1066,7 +1072,7 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
             import rasterio as rio
             from rasterio.merge import merge
 
-            srcs = [rio.open(p) for p in results["tiles_processed"]]
+            
 
 
             def batch_merge(tile_paths, batch_size=100):
@@ -1074,22 +1080,53 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
                 for i in range(0, len(tile_paths), batch_size):
                     batch = tile_paths[i:i+batch_size]
                     srcs = [rio.open(p) for p in batch]
-                    mosaic, out_transform = merge(srcs)
+                    mosaic, out_transform = merge(srcs,
+                                                  method="max",        # alternatives: "last", "min", "max", numpy.mean
+                                                    nodata=srcs[0].nodata, # keeps NoData consistent
+                                                    precision=10           # rounding in the affine transform (optional)
+                                                  
+                                                  )
                     for src in srcs:
                         src.close()
                     mosaics.append((mosaic, out_transform))
                 # Merge batch mosaics
-                srcs = [rio.io.MemoryFile().open(driver='GTiff', count=m.shape[0], height=m.shape[1], width=m.shape[2], dtype=m.dtype, transform=t) for m, t in mosaics]
-                final_mosaic, final_transform = merge(srcs)
+                #srcs = [rio.io.MemoryFile().open(driver='GTiff', count=m.shape[0], height=m.shape[1], width=m.shape[2], dtype=m.dtype, transform=t) for m, t in mosaics]
+
+                srcs = []
+                for m, t in mosaics:
+                    profile = {
+                        'driver': 'GTiff',
+                        'count': m.shape[0],
+                        'height': m.shape[1],
+                        'width': m.shape[2],
+                        'dtype': m.dtype,
+                        'transform': t
+                    }
+                    memfile = rio.io.MemoryFile()
+                    with memfile.open(**profile) as dataset:
+                        dataset.write(m)
+                    srcs.append(memfile.open())
+
+
+                final_mosaic, final_transform = merge(srcs,
+                                                      method="max",        # alternatives: "last", "min", "max", numpy.mean
+                                                        nodata=srcs[0].nodata, # keeps NoData consistent
+                                                        precision=10           # rounding in the affine transform (optional)
+                                                      )
+
                 for src in srcs:
                     src.close()
+
+                
                 return final_mosaic, final_transform
 
-            if len(srcs) > 100:
+            if len(results["tiles_processed"]) > 1:
 
-                mosaic, out_transform = merge(srcs)
+                mosaic, out_transform = batch_merge(results["tiles_processed"])
 
             else:
+
+                srcs = [rio.open(p) for p in results["tiles_processed"]]
    
 
                 mosaic, out_transform = merge(
@@ -1112,7 +1149,8 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
                 transform_cropped = rio.windows.transform(win, out_transform)
 
                 # 3) Build output profile (keep your original creation options if any)
-                meta = srcs[0].meta.copy()
+                tempsrc = rio.open(results["tiles_processed"][0])
+                meta = tempsrc.meta.copy()
                 meta.update(
                     height=h,
                     width=w,
@@ -1183,8 +1221,8 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
                 max_value = np.max(cv_img)
                 min_value = np.min(cv_img)
 
-                range = max_value - min_value
-                interval = range / 500
+                range0 = max_value - min_value
+                interval = range0 / 500
                 #threshold = min_value + interval * parameters["hrch_threshold"]
                 threshold = min_value + interval
 
