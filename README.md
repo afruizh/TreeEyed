@@ -90,7 +90,7 @@ Additionally, you need to have the models in a local folder an a configuration f
 	, "input_raster_path": "path/to/input/raster"
 	, "task": "inference"
 	, "raster_outputs": ["grayscale"]
-	, "vector_outputs": [""]
+	, "vector_outputs": []
 }
 ```
 
@@ -117,6 +117,29 @@ docker run --gpus all -v D:/local_mydata/treeeyed_tests/docker:/app/data -v D:/l
 ```
 python src/tree_eyed/tree_eyed_app.py --config /app/data/example_01.json 
 ```
+
+## Updates
+
+### V0.2.0
+
+- [X] Migration to ONNX format and ONNX runtime for all modles
+- [X] Reduced dependencies installation, improved installation feedback
+- [X] Added VHRTrees Model
+- [X] Added Custom ONNX model
+- [X] Added h_mean, h_min and h_max columns when using HighResCanopyHeight for vector output
+- [X] Improved layers visualization using Viridis color palette
+- [X] Automatic tiling (tiling, processing, merging)
+- [X] Cache System
+- [X] Update GUI and look-and-feel
+- [X] Added "Simple Inference" QGIS processing algorithm
+- [X] Improved processing architecture (interface, processor, tree_eyed_processor)
+- [X] Added CLI using `tree_eyed_app.py`
+- [X] Added docker support using `Dockerfile`
+- [X] Improved export to COCO dataset
+- [X] Support for non tif images
+- [X] Additional postprocessing steps (non-max supression)
+
+
 
 ## Roadmap
 
