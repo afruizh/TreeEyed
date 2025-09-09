@@ -129,7 +129,7 @@ class InstallerManager():
                         #'pyproj==3.6.1'
                         #,'pyarrow==15.0.2'
                         #,'geopandas==0.14.4'
-                        ,'rasterio==1.4.3' #,'rasterio==1.3.9'
+                        #,'rasterio==1.4.3' #,'rasterio==1.3.9'
                         ,'opencv-python-headless==4.11.0.86'
                          #,'rasterio==1.3.10'
                          , 'onnxruntime-gpu==1.22.0'
@@ -143,7 +143,7 @@ class InstallerManager():
                                 #'pyproj'
                                 #,'pyarrow'
                                 #,'geopandas'
-                                ,'rasterio'
+                                #,'rasterio'
                                 ,'cv2'
                                 #, 'rasterio'
                                 , 'onnxruntime'
@@ -271,10 +271,13 @@ class InstallerTask(QgsTask):
 
             QgsMessageLog.logMessage(str(cmd),MESSAGE_CATEGORY, Qgis.Info)
 
-            step_progress = (index)*1.0/len(cmds)*100
-            self.setProgress(step_progress)
+            if index == 0:
+                self.setProgress(1)
+            else:
+                step_progress = (index)*1.0/len(cmds)*100
+                self.setProgress(step_progress)
 
-            QgsMessageLog.logMessage(str(step_progress),MESSAGE_CATEGORY, Qgis.Info)
+                QgsMessageLog.logMessage(str(step_progress),MESSAGE_CATEGORY, Qgis.Info)
 
             full_cmd = ' '.join(cmd)
             QgsMessageLog.logMessage("If you encounter any trouble please open OsGeoW4 Shell and run the following command \"" + full_cmd + "\"",MESSAGE_CATEGORY, Qgis.Info)

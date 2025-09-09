@@ -1,0 +1,15 @@
+name: tree_eyed
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  # Core geospatial stack from conda-forge
+  - gdal
+  - pip
+  - pip:
+      - opencv-python-headless==4.11.0.86
+      - gdown==5.2.0
+      - onnxruntime-gpu==1.22.0
+      - pycocotools==2.0.8
+      - PySide6==6.9.2
+      - shapely==2.0.6

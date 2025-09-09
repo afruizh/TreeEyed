@@ -295,6 +295,10 @@ class TreeEyed:
                 self.pluginIsActive = False
                 return
             else:
+                # REMOVED: Causes PyArrow/GeoPandas threading crashes
+                # from .process.tree.custom_processor import  initialize_thread_safe_environment
+                # initialize_thread_safe_environment()
+
                 #Load 
                 from .tree_eyed_processor import TreeEyedProcessor
                 self.tree_eyed_processor = TreeEyedProcessor(self.iface)

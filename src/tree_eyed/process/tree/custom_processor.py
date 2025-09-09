@@ -1,6 +1,729 @@
+# GDAL/OGR-only polygon NMS
+def polygon_nms_gdal(wkt_list, iou_threshold=0.5):
+    import shapely.wkt
+    polys = [shapely.wkt.loads(wkt) for wkt in wkt_list]
+    keep = []
+    suppressed = set()
+    for i, poly_i in enumerate(polys):
+        if i in suppressed:
+            continue
+        keep.append(i)
+        for j in range(i+1, len(polys)):
+            if j in suppressed:
+                continue
+            poly_j = polys[j]
+            inter = poly_i.intersection(poly_j).area
+            union = poly_i.union(poly_j).area
+            iou = inter / union if union > 0 else 0
+            if iou > iou_threshold:
+                suppressed.add(j)
+    return [wkt_list[i] for i in keep], [i for i in keep]
+
 import os
 import numpy as np
 import json
+import threading
+
+# Thread-safe lock for CRS operations
+_crs_lock = threading.Lock()
+
+def tile_raster_gdal(input_raster_path, tiles_dir, tile_size, prefix="", progress_callback=None, interruption_check=None):
+    """
+    Tile raster using pure GDAL Python without processing.run()
+    
+    Args:
+        input_raster_path (str): Path to input raster
+        tiles_dir (str): Output directory for tiles  
+        tile_size (int): Size of each tile in pixels
+        prefix (str): Prefix for tile filenames
+        progress_callback (callable): Callback for progress updates
+        interruption_check (callable): Check if process should be interrupted
+        
+    Returns:
+        list: List of created tile file paths
+    """
+    from osgeo import gdal, gdal_array
+    import glob
+    
+    print("Tiling using GDAL Python")
+    
+    # Open input raster
+    src_ds = gdal.Open(input_raster_path)
+    if src_ds is None:
+        raise ValueError(f"Could not open raster: {input_raster_path}")
+    
+    # Get raster properties
+    width = src_ds.RasterXSize
+    height = src_ds.RasterYSize
+    bands = src_ds.RasterCount
+    geotransform = src_ds.GetGeoTransform()
+    projection = src_ds.GetProjection()
+    data_type = src_ds.GetRasterBand(1).DataType
+    
+    # Calculate number of tiles
+    tiles_x = int(np.ceil(width / tile_size))
+    tiles_y = int(np.ceil(height / tile_size))
+    total_tiles = tiles_x * tiles_y
+    
+    # Create output directory if needed
+    os.makedirs(tiles_dir, exist_ok=True)
+    
+    tile_files = []
+    tile_count = 0
+    nodata_value = -9999
+    
+    for row in range(tiles_y):
+        for col in range(tiles_x):
+            
+            # Check for interruption
+            if interruption_check and interruption_check():
+                print("Tiling interrupted by user")
+                break
+            
+            
+            
+            # Create tile filename
+            tile_filename = os.path.join(tiles_dir, f"{prefix}{tile_count:05d}.tif")
+            # Skip if file already exists
+            if os.path.exists(tile_filename):
+                #print(f"Tile {tile_filename} already exists, skipping...")
+
+                tile_files.append(tile_filename)
+                tile_count += 1
+                
+                # # Progress callback
+                # if progress_callback:
+                #     progress = tile_count / total_tiles
+                #     progress_callback({
+                #         "count": tile_count,
+                #         "total": total_tiles,
+                #         "progress": progress,
+                #         "status": "processing",
+                #         "logs": f"Creating tiles... {tile_count}/{total_tiles}"
+                #     })
+
+                continue
+
+            # Calculate tile bounds in pixels
+            x_offset = col * tile_size
+            y_offset = row * tile_size
+            x_size = min(tile_size, width - x_offset)
+            y_size = min(tile_size, height - y_offset)
+
+            # Calculate new geotransform for this tile
+            tile_geotransform = list(geotransform)
+            tile_geotransform[0] = geotransform[0] + x_offset * geotransform[1]
+            tile_geotransform[3] = geotransform[3] + y_offset * geotransform[5]
+            
+            # Create output tile
+            driver = gdal.GetDriverByName('GTiff')
+            tile_ds = driver.Create(tile_filename, tile_size, tile_size, bands, data_type, 
+                                  options=['TILED=YES', 'COMPRESS=LZW', 'BIGTIFF=IF_SAFER'])
+            
+            tile_ds.SetGeoTransform(tile_geotransform)
+            tile_ds.SetProjection(projection)
+            
+            # Read and write each band
+            for band_idx in range(1, bands + 1):
+                src_band = src_ds.GetRasterBand(band_idx)
+                tile_band = tile_ds.GetRasterBand(band_idx)
+                
+                # Read data from source
+                data = src_band.ReadAsArray(x_offset, y_offset, x_size, y_size)
+                
+                # Create padded array if tile is smaller than tile_size
+                if x_size < tile_size or y_size < tile_size:
+                    padded_data = np.full((tile_size, tile_size), nodata_value, dtype=data.dtype)
+                    padded_data[:y_size, :x_size] = data
+                    data = padded_data
+                
+                # Write to tile
+                tile_band.WriteArray(data)
+                tile_band.SetNoDataValue(nodata_value)
+            
+            # Flush and close tile
+            tile_ds.FlushCache()
+            tile_ds = None
+            
+            tile_files.append(tile_filename)
+            tile_count += 1
+            
+            # Progress callback
+            if progress_callback:
+                progress = tile_count / total_tiles
+                progress_callback({
+                    "count": tile_count,
+                    "total": total_tiles,
+                    "progress": progress,
+                    "status": "processing",
+                    "logs": f"Creating tiles... {tile_count}/{total_tiles}"
+                })
+        
+        # Break outer loop if interrupted
+        if interruption_check and interruption_check():
+            break
+    
+    # Close source dataset
+    src_ds = None
+    
+    print(f"Created {len(tile_files)} tiles in {tiles_dir}")
+    return tile_files
+
+# ===========================================
+# OGR-ONLY FUNCTIONS (Thread-safe, no GeoPandas/PyArrow)
+# ===========================================
+def merge_raster_gdal(tile_paths, output_path, nodata_value=-9999, data_type=None, progress_callback=None, interruption_check=None):
+    """
+    Merge raster tiles into a single raster using GDAL Python API.
+    Args:
+        tile_paths (list): List of raster tile file paths to merge
+        output_path (str): Output merged raster file path
+        nodata_value (int/float, optional): Nodata value to set in output
+        data_type (int, optional): GDAL data type (e.g., gdal.GDT_Float32)
+        progress_callback (callable, optional): Progress callback
+        interruption_check (callable, optional): Interruption check
+    Returns:
+        str: Output merged raster file path
+    """
+    from osgeo import gdal
+    import numpy as np
+
+    if not tile_paths:
+        raise ValueError("No tile paths provided for merging.")
+
+    # Open all tiles
+    src_datasets = [gdal.Open(p) for p in tile_paths]
+    src_datasets = [ds for ds in src_datasets if ds is not None]
+    if not src_datasets:
+        raise ValueError("No valid raster tiles to merge.")
+
+    # Get raster properties from first tile
+    first_ds = src_datasets[0]
+    band_count = first_ds.RasterCount
+    data_type = data_type if data_type is not None else first_ds.GetRasterBand(1).DataType
+    nodata_value = nodata_value if nodata_value is not None else first_ds.GetRasterBand(1).GetNoDataValue()
+    geotransform = first_ds.GetGeoTransform()
+    projection = first_ds.GetProjection()
+
+    # Calculate merged raster extent
+    min_x, min_y, max_x, max_y = None, None, None, None
+    for ds in src_datasets:
+        gt = ds.GetGeoTransform()
+        w, h = ds.RasterXSize, ds.RasterYSize
+        x0, y0 = gt[0], gt[3]
+        x1 = x0 + w * gt[1]
+        y1 = y0 + h * gt[5]
+        min_x = x0 if min_x is None else min(min_x, x0)
+        max_x = x1 if max_x is None else max(max_x, x1)
+        min_y = y1 if min_y is None else min(min_y, y1)
+        max_y = y0 if max_y is None else max(max_y, y0)
+
+    # Calculate output raster size
+    px_size_x = geotransform[1]
+    px_size_y = abs(geotransform[5])
+    out_width = int(np.ceil((max_x - min_x) / px_size_x))
+    out_height = int(np.ceil((max_y - min_y) / px_size_y))
+
+    # Create output raster
+    driver = gdal.GetDriverByName('GTiff')
+    out_ds = driver.Create(output_path, out_width, out_height, band_count, data_type,
+                          options=['TILED=YES', 'COMPRESS=LZW', 'BIGTIFF=IF_SAFER'])
+    out_gt = list(geotransform)
+    out_gt[0] = min_x
+    out_gt[3] = max_y
+    out_ds.SetGeoTransform(tuple(out_gt))
+    out_ds.SetProjection(projection)
+    # for b in range(1, band_count + 1):
+    #     out_ds.GetRasterBand(b).SetNoDataValue(nodata_value)
+
+    # # Fill output raster with nodata
+    # for b in range(1, band_count + 1):
+    #     out_ds.GetRasterBand(b).Fill(nodata_value)
+
+    # Copy each tile into output raster
+    for idx, ds in enumerate(src_datasets):
+        if interruption_check and interruption_check():
+            print("Merging interrupted by user.")
+            break
+        gt = ds.GetGeoTransform()
+        w, h = ds.RasterXSize, ds.RasterYSize
+        x0, y0 = gt[0], gt[3]
+        x_off = int(round((x0 - min_x) / px_size_x))
+        y_off = int(round((max_y - y0) / px_size_y))
+        for b in range(1, band_count + 1):
+            arr = ds.GetRasterBand(b).ReadAsArray()
+            out_band = out_ds.GetRasterBand(b)
+            out_band.WriteArray(arr, x_off, y_off)
+        if progress_callback:
+            progress = (idx + 1) / len(src_datasets)
+            progress_callback({
+                "count": idx + 1,
+                "total": len(src_datasets),
+                "progress": progress,
+                "status": "merging",
+                "logs": f"Merging tiles... {idx + 1}/{len(src_datasets)}"
+            })
+        ds = None
+    out_ds.FlushCache()
+    out_ds = None
+    print(f"Merged {len(src_datasets)} tiles into {output_path}")
+    return output_path
+
+# GDAL/OGR-only function to merge multiple shapefiles
+def merge_shp_gdal(shp_paths, output_path, dissolve=False, explode=False, nms=False, nms_iou=0.5, progress_callback=None, interruption_check=None):
+    """
+    Merge multiple shapefiles into one using GDAL/OGR, mimicking GeoPandas concat/dissolve/explode/reset_index.
+    Args:
+        shp_paths (list): List of input shapefile paths
+        output_path (str): Output shapefile path
+        dissolve (bool): If True, merge all geometries into one MultiPolygon
+        explode (bool): If True, split MultiPolygons into individual Polygons
+        progress_callback: Optional progress callback
+        interruption_check: Optional interruption check
+    """
+    from osgeo import ogr, osr
+    import shapely.wkt
+    import shapely.geometry
+    # Use first shapefile as template
+    driver = ogr.GetDriverByName("ESRI Shapefile")
+    if os.path.exists(output_path):
+        driver.DeleteDataSource(output_path)
+    ds_template = driver.Open(shp_paths[0])
+    layer_template = ds_template.GetLayer()
+    srs = layer_template.GetSpatialRef()
+    geom_type = layer_template.GetGeomType()
+    layer_defn = layer_template.GetLayerDefn()
+    ds_template = None
+    ds_out = driver.CreateDataSource(output_path)
+    layer_out = ds_out.CreateLayer("merged", srs, geom_type)
+    # Copy fields
+    for i in range(layer_defn.GetFieldCount()):
+        field_defn = layer_defn.GetFieldDefn(i)
+        layer_out.CreateField(field_defn)
+    # Collect all geometries and features
+    all_geoms = []
+    all_fields = []
+    total = len(shp_paths)
+    for idx, shp_path in enumerate(shp_paths):
+        ds_in = driver.Open(shp_path)
+        layer_in = ds_in.GetLayer()
+        for feat_in in layer_in:
+            geom = feat_in.GetGeometryRef().Clone()
+            wkt = geom.ExportToWkt()
+            all_geoms.append(wkt)
+            fields = [feat_in.GetField(i) for i in range(layer_defn.GetFieldCount())]
+            all_fields.append(fields)
+        ds_in = None
+        if progress_callback:
+            progress_callback({"count": idx+1, "total": total, "progress": (idx+1)/total, "status": "merging shapefiles"})
+        if interruption_check and interruption_check():
+            ds_out = None
+            return None
+    # Dissolve: merge all geometries into one MultiPolygon
+    if dissolve:
+        polys = [shapely.wkt.loads(wkt) for wkt in all_geoms]
+        merged = shapely.geometry.MultiPolygon([g for g in polys if g.geom_type == "Polygon"])
+        all_geoms = [merged.wkt]
+        all_fields = [all_fields[0] if all_fields else []]
+    # Explode: split MultiPolygons into individual Polygons
+    if explode:
+        new_geoms = []
+        new_fields = []
+        for wkt, fields in zip(all_geoms, all_fields):
+            geom = shapely.wkt.loads(wkt)
+            if geom.geom_type == "MultiPolygon":
+                for poly in geom.geoms:
+                    new_geoms.append(poly.wkt)
+                    new_fields.append(fields)
+            else:
+                new_geoms.append(wkt)
+                new_fields.append(fields)
+        all_geoms = new_geoms
+        all_fields = new_fields
+    # Optionally perform NMS
+    if nms:
+        all_geoms, keep_indices = polygon_nms_gdal(all_geoms, iou_threshold=nms_iou)
+        all_fields = [all_fields[i] for i in keep_indices]
+    # Write features to output
+    for idx, (wkt, fields) in enumerate(zip(all_geoms, all_fields)):
+        geom = ogr.CreateGeometryFromWkt(wkt)
+        feat_out = ogr.Feature(layer_out.GetLayerDefn())
+        for i, val in enumerate(fields):
+            field_name = layer_out.GetLayerDefn().GetFieldDefn(i).GetNameRef()
+            # Reindex ID from 1 if field is 'ID'
+            if field_name == "ID":
+                feat_out.SetField(field_name, idx + 1)
+            else:
+                feat_out.SetField(field_name, val)
+        feat_out.SetGeometry(geom)
+        layer_out.CreateFeature(feat_out)
+        feat_out = None
+    ds_out.FlushCache()
+    ds_out = None
+    return output_path
+
+def create_shapefile_ogr(output_filename, geometries, projection, geom_type="polygon"):
+    """
+    Create shapefile using pure OGR without GeoPandas
+    
+    Args:
+        output_filename (str): Path to output shapefile
+        geometries (list): List of geometry objects or coordinates
+        projection (str): WKT projection string
+        geom_type (str): "polygon", "bbox", or "centroid"
+    """
+    from osgeo import ogr, osr
+    
+    # Create the output shapefile
+    driver = ogr.GetDriverByName("ESRI Shapefile")
+    
+    # Remove existing file if it exists
+    if os.path.exists(output_filename):
+        driver.DeleteDataSource(output_filename)
+        
+    data_source = driver.CreateDataSource(output_filename)
+    
+    # Create spatial reference
+    srs = osr.SpatialReference()
+    srs.ImportFromWkt(projection)
+    
+    # Create layer with appropriate geometry type
+    ogr_geom_type = ogr.wkbPolygon if geom_type in ["polygon", "bbox"] else ogr.wkbPoint
+    layer = data_source.CreateLayer("features", srs, ogr_geom_type)
+    
+    # Add fields
+    layer.CreateField(ogr.FieldDefn("ID", ogr.OFTInteger))
+    #layer.CreateField(ogr.FieldDefn("Class", ogr.OFTString))
+    layer.CreateField(ogr.FieldDefn("label", ogr.OFTString))
+    layer.CreateField(ogr.FieldDefn("area_m2", ogr.OFTReal))
+    layer.CreateField(ogr.FieldDefn("lat", ogr.OFTReal))
+    layer.CreateField(ogr.FieldDefn("lon", ogr.OFTReal))    
+    layer.CreateField(ogr.FieldDefn("circ", ogr.OFTReal))
+
+    import numpy as np
+
+    # Prepare transformation to WGS84
+    tgt_srs = osr.SpatialReference()
+    tgt_srs.ImportFromEPSG(4326)
+    coord_transform = osr.CoordinateTransformation(srs, tgt_srs)
+
+    for idx, geom_data in enumerate(geometries):
+        feature = ogr.Feature(layer.GetLayerDefn())
+        feature.SetField("ID", idx+1)
+        #feature.SetField("Class", "tree")
+        feature.SetField("label", "tree")
+
+        # Calculate geometry and properties
+        if geom_type == "polygon":
+            ring = ogr.Geometry(ogr.wkbLinearRing)
+            for coord in geom_data:
+                ring.AddPoint(coord[0], coord[1])
+            ring.CloseRings()
+            polygon = ogr.Geometry(ogr.wkbPolygon)
+            polygon.AddGeometry(ring)
+            feature.SetGeometry(polygon)
+
+            area = polygon.GetArea()
+            perim = polygon.Boundary().Length()
+            centroid = polygon.Centroid()
+            lon_src = centroid.GetX()
+            lat_src = centroid.GetY()
+            lon, lat, _ = coord_transform.TransformPoint(lon_src, lat_src)
+            circ = 4 * np.pi * area / perim**2 if perim > 0 else 0
+
+        elif geom_type == "bbox":
+            minx, miny, maxx, maxy = geom_data
+            ring = ogr.Geometry(ogr.wkbLinearRing)
+            ring.AddPoint(minx, miny)
+            ring.AddPoint(maxx, miny)
+            ring.AddPoint(maxx, maxy)
+            ring.AddPoint(minx, maxy)
+            ring.CloseRings()
+            bbox = ogr.Geometry(ogr.wkbPolygon)
+            bbox.AddGeometry(ring)
+            feature.SetGeometry(bbox)
+
+            area = bbox.GetArea()
+            perim = bbox.Boundary().Length()
+            centroid = bbox.Centroid()
+            lon_src = centroid.GetX()
+            lat_src = centroid.GetY()
+            lon, lat, _ = coord_transform.TransformPoint(lon_src, lat_src)
+            circ = 4 * np.pi * area / perim**2 if perim > 0 else 0
+
+        elif geom_type == "centroid":
+            point = ogr.Geometry(ogr.wkbPoint)
+            point.AddPoint(geom_data[0], geom_data[1])
+            feature.SetGeometry(point)
+            lon, lat, _ = coord_transform.TransformPoint(geom_data[0], geom_data[1])
+            area = 0.0
+            circ = 0.0
+
+        feature.SetField("area_m2", float(area))
+        feature.SetField("lon", float(lon))
+        feature.SetField("lat", float(lat))
+        feature.SetField("circ", float(circ))
+
+        layer.CreateFeature(feature)
+        feature = None
+
+    data_source = None
+
+def convert_shapefile_to_geomtype(input_shp, output_shp, geom_type="centroid"):
+    """
+    Convert an existing shapefile to centroids or bounding boxes and save as a new shapefile using OGR.
+    Args:
+        input_shp (str): Path to input shapefile
+        output_shp (str): Path to output shapefile
+        geom_type (str): "centroid" or "bbox"
+    """
+    from osgeo import ogr, osr
+    driver = ogr.GetDriverByName("ESRI Shapefile")
+    ds_in = driver.Open(input_shp)
+    layer_in = ds_in.GetLayer()
+    srs = layer_in.GetSpatialRef()
+    layer_defn = layer_in.GetLayerDefn()
+    # Remove output if exists
+    if os.path.exists(output_shp):
+        driver.DeleteDataSource(output_shp)
+    ds_out = driver.CreateDataSource(output_shp)
+    ogr_geom_type = ogr.wkbPoint if geom_type == "centroid" else ogr.wkbPolygon
+    layer_out = ds_out.CreateLayer("features", srs, ogr_geom_type)
+    # Copy fields
+    for i in range(layer_defn.GetFieldCount()):
+        field_defn = layer_defn.GetFieldDefn(i)
+        layer_out.CreateField(field_defn)
+    # Add features
+    for i, feat_in in enumerate(layer_in):
+        geom = feat_in.GetGeometryRef()
+        feat_out = ogr.Feature(layer_out.GetLayerDefn())
+        # Copy field values
+        for j in range(layer_defn.GetFieldCount()):
+            field_name = layer_defn.GetFieldDefn(j).GetNameRef()
+            feat_out.SetField(field_name, feat_in.GetField(field_name))
+        # Reindex ID from 1
+        if layer_out.FindFieldIndex("ID", 1) >= 0:
+            feat_out.SetField("ID", i + 1)
+        if geom_type == "centroid":
+            centroid = geom.Centroid()
+            feat_out.SetGeometry(centroid)
+        elif geom_type == "bbox":
+            bbox = geom.GetEnvelope()
+            ring_bb = ogr.Geometry(ogr.wkbLinearRing)
+            ring_bb.AddPoint(bbox[0], bbox[2])
+            ring_bb.AddPoint(bbox[1], bbox[2])
+            ring_bb.AddPoint(bbox[1], bbox[3])
+            ring_bb.AddPoint(bbox[0], bbox[3])
+            ring_bb.AddPoint(bbox[0], bbox[2])
+            poly_bb = ogr.Geometry(ogr.wkbPolygon)
+            poly_bb.AddGeometry(ring_bb)
+            feat_out.SetGeometry(poly_bb)
+        layer_out.CreateFeature(feat_out)
+        feat_out = None
+    ds_out.FlushCache()
+    ds_out = None
+    ds_in = None
+
+# def save_shapefile_polygon_binary_raster_ogr(parameters):
+#     """
+#     OGR-only version that completely avoids GeoPandas and PyArrow
+#     """
+#     import cv2 as cv
+#     from osgeo import gdal, osr
+    
+#     results = {}
+#     results["output_files"] = []
+    
+#     binary_raster_path = parameters["binary_raster_path"]
+    
+#     # Read raster using GDAL
+#     ds = gdal.Open(binary_raster_path)
+#     gt = ds.GetGeoTransform()
+#     proj = ds.GetProjection()
+#     width = ds.RasterXSize
+#     height = ds.RasterYSize
+#     arr = ds.GetRasterBand(1).ReadAsArray()
+#     ds = None
+    
+#     thresh = arr
+    
+#     # Apply threshold if needed
+#     if "raster2vector_threshold" in parameters:
+#         percentage = parameters["raster2vector_threshold"] / 100.0
+#         max_value = np.max(thresh)
+#         min_value = np.min(thresh)
+#         range0 = max_value - min_value
+#         interval = range0 * percentage
+#         threshold = min_value + interval
+#         thresh = (thresh >= threshold) * 1.0
+        
+#     if thresh.dtype == np.float32 or thresh.dtype == np.float64:
+#         thresh = (thresh * 255).astype(np.uint8)
+        
+#     if len(thresh.shape) == 3 and thresh.shape[2] == 3:
+#         thresh = cv.cvtColor(thresh, cv.COLOR_RGB2GRAY)
+        
+#     # Find contours
+#     contours, hierarchy = cv.findContours(thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    
+#     # Process contours and convert to geo coordinates
+#     polygons = []
+#     bboxes = []
+#     centroids = []
+    
+#     for index, contour in enumerate(contours):
+#         new_contour = np.squeeze(contour)
+#         if new_contour.ndim < 2:
+#             continue
+            
+#         # Convert pixel coordinates to geographic coordinates
+#         coord_polygon = []
+#         for point in new_contour:
+#             x = point[0]
+#             y = point[1]
+#             geo_x = gt[0] + x * gt[1] + y * gt[2]
+#             geo_y = gt[3] + x * gt[4] + y * gt[5]
+#             coord_polygon.append((geo_x, geo_y))
+            
+#         if len(coord_polygon) > 2:
+#             polygons.append(coord_polygon)
+            
+#             # Calculate bounding box
+#             xs = [coord[0] for coord in coord_polygon]
+#             ys = [coord[1] for coord in coord_polygon]
+#             minx, maxx = min(xs), max(xs)
+#             miny, maxy = min(ys), max(ys)
+#             bboxes.append((minx, miny, maxx, maxy))
+            
+#             # Calculate centroid
+#             centroid_x = sum(xs) / len(xs)
+#             centroid_y = sum(ys) / len(ys)
+#             centroids.append((centroid_x, centroid_y))
+    
+#     # Create output shapefiles
+#     if "polygons" in parameters["vector_outputs"]:
+#         output_filename = os.path.join(parameters["output_path"], parameters["prefix"] + "_vector.shp")
+#         create_shapefile_ogr(output_filename, polygons, proj, "polygon")
+#         results["output_files"].append(output_filename)
+        
+#     if "bounding_boxes" in parameters["vector_outputs"]:
+#         output_filename = os.path.join(parameters["output_path"], parameters["prefix"] + "_vector_bb.shp")
+#         create_shapefile_ogr(output_filename, bboxes, proj, "bbox")
+#         results["output_files"].append(output_filename)
+        
+#     if "centroids" in parameters["vector_outputs"]:
+#         output_filename = os.path.join(parameters["output_path"], parameters["prefix"] + "_vector_centroids.shp")
+#         create_shapefile_ogr(output_filename, centroids, proj, "centroid")
+#         results["output_files"].append(output_filename)
+        
+#     return results
+
+def bb_2_shapefile_ogr(df, parameters):
+    """
+    Convert bounding box DataFrame to shapefile using pure OGR
+    """
+    from osgeo import gdal, osr
+    
+    input_raster_path = parameters["input_raster_path"]
+    
+    try:
+        ds = gdal.Open(input_raster_path)
+        gt = ds.GetGeoTransform()
+        proj = ds.GetProjection()
+        width = ds.RasterXSize
+        height = ds.RasterYSize
+        has_epsg = True
+        ds = None
+    except Exception:
+        from PIL import Image
+        img = Image.open(input_raster_path)
+        width, height = img.size
+        gt = None
+        proj = None
+        has_epsg = False
+    
+    # Create temporary shapefile
+    temp_output = os.path.join(parameters.get("output_path", "."), "temp_bboxes.shp")
+    
+    bboxes = []
+    for index, detection in df.iterrows():
+        xmin = detection["xmin"]
+        ymin = detection["ymin"]
+        xmax = detection["xmax"]
+        ymax = detection["ymax"]
+        
+        if has_epsg and gt:
+            # Convert pixel coordinates to geo coordinates
+            geo_xmin = gt[0] + xmin * gt[1] + ymin * gt[2]
+            geo_ymin = gt[3] + xmin * gt[4] + ymin * gt[5]
+            geo_xmax = gt[0] + xmax * gt[1] + ymax * gt[2]
+            geo_ymax = gt[3] + xmax * gt[4] + ymax * gt[5]
+            bboxes.append((geo_xmin, geo_ymin, geo_xmax, geo_ymax))
+        else:
+            bboxes.append((xmin, ymin - height, xmax, ymax - height))
+    
+    if bboxes:
+        create_shapefile_ogr(temp_output, bboxes, proj or "", "bbox")
+    
+    return temp_output
+
+
+def safe_set_crs(gdf, epsg=None, crs=None):
+    """Thread-safe CRS setting for GeoDataFrames"""
+    with _crs_lock:
+        try:
+            if epsg:
+                if isinstance(epsg, str) and epsg.startswith("EPSG:"):
+                    epsg_code = epsg.replace("EPSG:", "")
+                else:
+                    epsg_code = str(epsg)
+                return gdf.set_crs(epsg=epsg_code, allow_override=True)
+            elif crs:
+                return gdf.set_crs(crs, allow_override=True)
+            else:
+                return gdf
+        except Exception as e:
+            print(f"Warning: Could not set CRS: {e}")
+            return gdf
+
+def safe_to_crs(gdf, target_crs):
+    """Thread-safe CRS transformation for GeoDataFrames"""
+    with _crs_lock:
+        try:
+            return gdf.to_crs(target_crs)
+        except Exception as e:
+            print(f"Warning: Could not transform CRS: {e}")
+            return gdf
+
+def safe_pyproj_transform(source_crs, target_crs, x, y):
+    """Thread-safe coordinate transformation using pyproj"""
+    with _crs_lock:
+        try:
+            from pyproj import Transformer
+            transformer = Transformer.from_crs(source_crs, target_crs, always_xy=True)
+            return transformer.transform(x, y)
+        except Exception as e:
+            print(f"Warning: Could not transform coordinates: {e}")
+            return x, y
+
+def initialize_thread_safe_environment():
+    """Initialize thread-safe environment for geospatial operations"""
+    try:
+        # Pre-load libraries in main thread
+        import geopandas as gpd
+        import pyproj
+        from pyproj import CRS
+        
+        # Initialize a dummy CRS to preload proj data
+        with _crs_lock:
+            dummy_crs = CRS.from_epsg(4326)
+            dummy_transformer = pyproj.Transformer.from_crs(4326, 3857, always_xy=True)
+            
+        print("Thread-safe environment initialized successfully")
+        return True
+    except Exception as e:
+        print(f"Warning: Could not fully initialize thread-safe environment: {e}")
+        return False
 
 
 def pos2coords(pos, extent, img_width, img_height):
@@ -100,14 +823,28 @@ def save_shapefile_polygon_binary_raster(parameters):
             epsg = src.crs.to_string()
             thresh = src.read(1)  # Read the first band
 
+        # Apply additional threshold if needed
+        if "raster2vector_threshold" in parameters:
+            percentage = parameters["raster2vector_threshold"]/100.0
+
+            max_value = np.max(thresh)
+            min_value = np.min(thresh)
+
+            range0 = max_value - min_value
+            interval = range0*percentage
+            #threshold = min_value + interval * parameters["hrch_threshold"]
+            threshold = min_value + interval
+            thresh = (thresh >= threshold)*1.0
+
         #Check if thresh is CV_32FC1 and convert to CV_8UC1
-        if thresh.dtype == np.float32:
+        if thresh.dtype == np.float32 or thresh.dtype == np.float64:
             thresh = (thresh * 255).astype(np.uint8)
         
         #if 3 channels, convert to single channel
         if len(thresh.shape)==3 and thresh.shape[2]==3:
             thresh = cv.cvtColor(thresh, cv.COLOR_RGB2GRAY)
-            
+
+        
 
         df_tree_polygons_test = pd.DataFrame()
         tree_bb = []
@@ -174,9 +911,9 @@ def save_shapefile_polygon_binary_raster(parameters):
                     #print("polygon_geometry", polygon_geometry)
 
 
-                    df_item_test = pd.DataFrame({'Class': 'Tree'
+                    df_item_test = pd.DataFrame({'Class': 'tree'
                                         , 'ID': count
-                                        , 'label': 'Tree'
+                                        , 'label': 'tree'
                                         }
                                         , index=[count])
                     df_tree_polygons_test = pd.concat((df_tree_polygons_test, df_item_test))
@@ -190,7 +927,7 @@ def save_shapefile_polygon_binary_raster(parameters):
 
         # Create geodataframe
         gdf_trees = gpd.GeoDataFrame(df_tree_polygons_test, geometry=tree_bb)
-        gdf_trees = gdf_trees.set_crs(epsg=epsg.replace("EPSG:",""))
+        gdf_trees = safe_set_crs(gdf_trees, epsg=epsg.replace("EPSG:",""))
         
         #config_debug("len", len(gdf_trees))
 
@@ -244,18 +981,15 @@ def save_shapefile_polygon_binary_raster(parameters):
             epsg_code = int(epsg)
 
         # Transform lower-left corner to WGS84
-        transformer = Transformer.from_crs(epsg_code, 4326, always_xy=True)
-        lon, lat = transformer.transform(minx, miny)
+        lon, lat = safe_pyproj_transform(epsg_code, 4326, minx, miny)
 
 
         new_crs = "+proj=cea +lat_0=" + str(lat)  + " +lon_0="+ str(lon) + " +units=m"
         #print(new_crs)
         #df = df.to_crs("+proj=cea +lat_0=35.68250088833567 +lon_0=139.7671 +units=m")
-        gdf_trees["area_m2"] = gdf_trees.to_crs(new_crs).area
-        gdf_trees["perim_m"] = gdf_trees.to_crs(new_crs).length
-        gdf_trees["a_diam_m"] = np.sqrt(gdf_trees["area_m2"]*4.0/np.pi)
-
-        # Add lat lon of centroid
+        gdf_trees["area_m2"] = safe_to_crs(gdf_trees, new_crs).area
+        gdf_trees["perim_m"] = safe_to_crs(gdf_trees, new_crs).length
+        gdf_trees["a_diam_m"] = np.sqrt(gdf_trees["area_m2"]*4.0/np.pi)        # Add lat lon of centroid
         gdf_trees["lon"] = gdf_trees.geometry.centroid.x
         gdf_trees["lat"] = gdf_trees.geometry.centroid.y
 
@@ -381,9 +1115,9 @@ def bb_2_geodataframe(df, parameters):
 
                 polygon_object = shapely.geometry.Polygon(coord_polygon)
 
-                df_item_test = pd.DataFrame({'Class': 'Tree'
+                df_item_test = pd.DataFrame({'Class': 'tree'
                                     , 'ID': count
-                                    , 'label': 'Tree'
+                                    , 'label': 'tree'
                                     }
                                     , index=[count])
                 df_tree_polygons_test = pd.concat((df_tree_polygons_test, df_item_test))
@@ -423,7 +1157,7 @@ def bb_2_geodataframe(df, parameters):
 
         if has_epsg:
 
-            gdf_trees = gdf_trees.set_crs(epsg=epsg.replace("EPSG:",""))
+            gdf_trees = safe_set_crs(gdf_trees, epsg=epsg.replace("EPSG:",""))
 
             print(gdf_trees)
 
@@ -442,16 +1176,17 @@ def bb_2_geodataframe(df, parameters):
                 epsg_code = int(epsg)
 
             # Transform lower-left corner to WGS84
-            transformer = Transformer.from_crs(epsg_code, 4326, always_xy=True)
-            lon, lat = transformer.transform(minx, miny)
+            lon, lat = safe_pyproj_transform(epsg_code, 4326, minx, miny)
 
             new_crs = "+proj=cea +lat_0=" + str(lat)  + " +lon_0="+ str(lon) + " +units=m"
             #print(new_crs)
             #df = df.to_crs("+proj=cea +lat_0=35.68250088833567 +lon_0=139.7671 +units=m")
-            gdf_trees["area_m2"] = gdf_trees.to_crs(new_crs).area
+            gdf_trees["area_m2"] = safe_to_crs(gdf_trees, new_crs).area
             gdf_trees["a_diam_m"] = np.sqrt(gdf_trees["area_m2"]*4.0/np.pi)
 
         return gdf_trees
+
+        
 
 
 
@@ -461,7 +1196,8 @@ def export_coco_dataset(parameters, progress_callback = None, interruption_check
     image_path = parameters["image_path"]
     annotations_path = parameters["annotations_path"]
     num_tiles = parameters["num_tiles"] # now it would be max pixels per tile
-    overlap = int(parameters["overlap"])/100.0
+    #overlap = int(parameters["overlap"])/100.0
+    overlap = int(parameters["overlap"])
     output_format = "." + parameters["output_format"].lower()
     
     dir_name = parameters["prefix"] + "_coco_dataset"
@@ -469,11 +1205,11 @@ def export_coco_dataset(parameters, progress_callback = None, interruption_check
     path_output = os.path.join(parameters["output_path"], dir_name)
 
     #from .process.tree.qgis2coco.qgis2coco import QGIS2COCO
-    from .qgis2coco.qgis2coco import QGIS2COCO
-    from .qgis2coco.qgis2coco import check_raster
+    from .qgis2coco.qgis2coco_gdal import QGIS2COCO_GDAL
+    from .qgis2coco.qgis2coco_gdal import check_raster_gdal
 
 
-    metadata_final = check_raster(image_path)
+    metadata_final = check_raster_gdal(image_path)
     w = metadata_final["width"]
     h = metadata_final["height"]
 
@@ -491,7 +1227,7 @@ def export_coco_dataset(parameters, progress_callback = None, interruption_check
     COCO_LICENSE_URL = "https://creativecommons.org/licenses/by-nc/4.0/"
     COCO_INFORMATION = ""
 
-    exporter = QGIS2COCO(image_path
+    exporter = QGIS2COCO_GDAL(image_path
             , annotations_path
             , allow_clipped_annotations = False
             , allow_no_annotations = False
@@ -503,7 +1239,8 @@ def export_coco_dataset(parameters, progress_callback = None, interruption_check
             , progress_callback = progress_callback
             , interruption_check = interruption_check
         )
-    exporter.convert(path_output, rows = rows, overlap = overlap)
+    #exporter.convert(path_output, rows = rows, overlap = overlap)
+    exporter.convert(path_output, cell_w=max_px, cell_h=max_px, overlap_h=overlap, overlap_v=overlap)
 
 def clean_cache_folder(output_dir):
 
@@ -525,7 +1262,8 @@ def inference(parameters, progress_callback = None, interruption_check = None):
 
     input_raster_path = parameters["input_raster_path"]
 
-    is_geotif_flag = is_geotif(input_raster_path)
+    #is_geotif_flag = is_geotif(input_raster_path)
+    is_geotif_flag = is_geotif_gdal(input_raster_path)
 
     if is_geotif_flag:
         return inference_georaster(parameters, progress_callback, interruption_check)
@@ -807,7 +1545,12 @@ def inference_img(parameters, progress_callback = None, interruption_check = Non
 
             cv.imwrite(processed_filepath, merged)
 
+
+
+
     return parameters
+
+
 
 def polygon_nms(gdf, iou_threshold=0.5, score_col=None):
     # If thre is a confidence score, sort by it (descending)
@@ -949,55 +1692,127 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
 
     # TODO: Parallelize tiling and inference
     # Tile if necessary
-    from .qgis2coco.qgis2coco import TILER    
+    import importlib
+    if importlib.util.find_spec("qgis") is not None:
 
-    # tiling
-    converter = TILER(input_raster_path
-            , ""
-            , category = "category"
-            , supercategory = "supercategory"
-            , allow_clipped_annotations = False
-            , allow_no_annotations = False
-            , class_column = ["label"]
-            , invalid_class=["target", "empty"]
-            , preffix = ''
-            , crs = "4326"
-            , progress_callback = progress_callback
-            , interruption_check = interruption_check
-            )
-    
-    converter.path_images = tiles_dir   
-    
-    from .qgis2coco.qgis2coco import check_raster
-    metadata = check_raster(input_raster_path)
+        # import processing
+
+        # print("Tiling using GDAL")
+
+        # task_parameters = {
+        #     'INPUT': [input_raster_path],
+        #     'TILE_SIZE_X': tile_size,
+        #     'TILE_SIZE_Y': tile_size,
+        #     'OVERLAP': 0,
+        #     'LEVELS': 1,
+        #     'SOURCE_CRS': None,
+        #     'RESAMPLING': 0,
+        #     'DELIMITER': ';',
+        #     # Ensure output is RGBA and padded with transparency
+        #     'OPTIONS': 'TILED=YES|COMPRESS=LZW|BIGTIFF=IF_SAFER|PHOTOMETRIC=RGB|ALPHA=YES',
+        #     'EXTRA': '-co ALPHA=YES',
+        #     'DATA_TYPE': 0,  # Byte
+        #     'ONLY_PYRAMIDS': False,
+        #     'DIR_FOR_ROW': False,
+        #     'OUTPUT': tiles_dir
+        # }
+        # processing.run("gdal:retile", task_parameters)
+
+        # from osgeo import gdal, gdal_array
+        # import numpy as np
+        # import glob
+        # #import os
 
 
-    w = metadata["width"]
-    h = metadata["height"]
-    max_px = tile_size
-    #max_px = 256    
-    overlap = 0
+        # nodata_value = -9999
+        # tile_pattern = os.path.join(tiles_dir, "*.tif")
+        # tile_files = glob.glob(tile_pattern)
+        # for tile_path in tile_files:
+        #     ds = gdal.Open(tile_path, gdal.GA_Update)
+        #     if ds is None:
+        #         continue
+        #     width = ds.RasterXSize
+        #     height = ds.RasterYSize
+        #     bands = ds.RasterCount
+        #     dtype = ds.GetRasterBand(1).DataType
+        #     if width == tile_size and height == tile_size:
+        #         ds = None
+        #         continue  # already correct size
+        #     arr = np.zeros((bands, height, width), dtype=gdal_array.GDALTypeCodeToNumericTypeCode(dtype))
+        #     for b in range(bands):
+        #         arr[b] = ds.GetRasterBand(b+1).ReadAsArray()
+        #     padded = np.full((bands, tile_size, tile_size), nodata_value, dtype=arr.dtype)
+        #     padded[:, :height, :width] = arr
+        #     geotransform = ds.GetGeoTransform()
+        #     projection = ds.GetProjection()
+        #     ds = None
+        #     driver = gdal.GetDriverByName('GTiff')
+        #     out_ds = driver.Create(tile_path, tile_size, tile_size, bands, dtype)
+        #     out_ds.SetGeoTransform(geotransform)
+        #     out_ds.SetProjection(projection)
+        #     for b in range(bands):
+        #         out_ds.GetRasterBand(b+1).WriteArray(padded[b])
+        #         out_ds.GetRasterBand(b+1).SetNoDataValue(nodata_value)
+        #     out_ds.FlushCache()
+        #     out_ds = None
 
-    # rows = 1
+        tile_raster_gdal(input_raster_path
+                         , tiles_dir
+                         , tile_size
+                         , prefix=""
+                         , progress_callback=progress_callback
+                         , interruption_check=interruption_check)
 
-    # if (w > max_px or h > max_px):
+    else:
+        from .qgis2coco.qgis2coco import TILER    
 
-    #     max_val = max(w,h)
-    #     #print(max_val)        
-    #     #rows = np.ceil(max_val/final_max_px)
-    #     #rows = (max_val - np.ceil(overlap*max_val))/(max_px - np.ceil(overlap*max_val))
-    #     rows = np.ceil((max_val-overlap*max_px)/(max_px*(1-overlap)))
+        # tiling
+        converter = TILER(input_raster_path
+                , ""
+                , category = "category"
+                , supercategory = "supercategory"
+                , allow_clipped_annotations = False
+                , allow_no_annotations = False
+                , class_column = ["label"]
+                , invalid_class=["target", "empty"]
+                , preffix = ''
+                , crs = "4326"
+                , progress_callback = progress_callback
+                , interruption_check = interruption_check
+                )
+        
+        converter.path_images = tiles_dir   
+        
+        from .qgis2coco.qgis2coco import check_raster
+        metadata = check_raster(input_raster_path)
 
-    # print("rows", rows)
-    # print("overlap", overlap)
 
-    # # Create a vector grid for each tile
-    # converter.create_grid(rows, overlap, overlap)
+        w = metadata["width"]
+        h = metadata["height"]
+        max_px = tile_size
+        #max_px = 256    
+        overlap = 0
 
-    converter.create_grid_px(max_px, overlap)  # Use 1 row for single tile extraction
+        # rows = 1
 
-    # Extract tiles and save
-    converter.extract_tiles()
+        # if (w > max_px or h > max_px):
+
+        #     max_val = max(w,h)
+        #     #print(max_val)        
+        #     #rows = np.ceil(max_val/final_max_px)
+        #     #rows = (max_val - np.ceil(overlap*max_val))/(max_px - np.ceil(overlap*max_val))
+        #     rows = np.ceil((max_val-overlap*max_px)/(max_px*(1-overlap)))
+
+        # print("rows", rows)
+        # print("overlap", overlap)
+
+        # # Create a vector grid for each tile
+        # converter.create_grid(rows, overlap, overlap)
+
+        converter.create_grid_px(max_px, overlap)  # Use 1 row for single tile extraction
+
+        # Extract tiles and save
+        converter.extract_tiles()
 
 
     pattern = os.path.join(tiles_dir, "*.tif")
@@ -1012,6 +1827,14 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
             , "tiles": tiles
         }
     )
+
+    # Check if interruption
+    if interruption_check is not None:
+        if interruption_check():
+            #add 'status':'interrupted' to parameters
+            parameters["status"] = "interrupted"
+            parameters["log"] = "Process interrupted by user."
+            return parameters
 
 
 
@@ -1029,37 +1852,78 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
 
             print(processed_filepath)
 
-            # Merge shp filepaths in results["tiles_processed"]
-            import geopandas as gpd
-            import pandas as pd
+            import importlib
 
-            gdfs = []
-            for shp_path in results["tiles_processed"]:
-                gdf = gpd.read_file(shp_path)
-                gdfs.append(gdf)
+            if importlib.util.find_spec("osgeo") is not None:
 
-            # Concatenate all GeoDataFrames
-            merged_gdf = gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
+                from osgeo import gdal
 
-            # Dissolve to merge geometries
-            #merged_gdf = merged_gdf.dissolve()
-            #merged_gdf = merged_gdf.explode()
-            # Save merged GeoDataFrame to a new shapefile
-            merged_gdf = merged_gdf.reset_index(drop=True)
+                apply_nms = False
+                if model == "VHRTrees":
+                    apply_nms = True
 
-            # If model is VHRTrees apply nms
-            if model == "VHRTrees":
-                merged_gdf = polygon_nms(merged_gdf, iou_threshold=0.5, score_col=None)
-
-            merged_gdf.to_file(processed_filepath, driver='ESRI Shapefile')
+                merge_shp_gdal(results["tiles_processed"]
+                                , processed_filepath
+                                , nms=apply_nms
+                                , progress_callback=progress_callback
+                                , interruption_check=interruption_check)
 
 
-            # non-max suppression
+            else:
+
+                # Merge shp filepaths in results["tiles_processed"]
+                import geopandas as gpd
+                import pandas as pd
+
+                gdfs = []
+                for shp_path in results["tiles_processed"]:
+                    gdf = gpd.read_file(shp_path)
+                    gdfs.append(gdf)
+
+                # Concatenate all GeoDataFrames
+                merged_gdf = gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
+
+                # Dissolve to merge geometries
+                #merged_gdf = merged_gdf.dissolve()
+                #merged_gdf = merged_gdf.explode()
+                # Save merged GeoDataFrame to a new shapefile
+                merged_gdf = merged_gdf.reset_index(drop=True)
+
+                # If model is VHRTrees apply nms
+                if model == "VHRTrees":
+                    merged_gdf = polygon_nms(merged_gdf, iou_threshold=0.5, score_col=None)
+
+                merged_gdf.to_file(processed_filepath, driver='ESRI Shapefile')
+
+
+                # non-max suppression
 
 
             parameters["output_files"] = []
             parameters["output_files"].append(processed_filepath)
 
+            if "bounding_boxes" in parameters["vector_outputs"]:
+
+                if not ("_bb" in processed_filepath):
+
+                    bb_path = processed_filepath.replace(".shp", "_vector_bb.shp")
+                    convert_shapefile_to_geomtype(processed_filepath
+                                                , bb_path
+                                                , geom_type="bbox")
+
+                    parameters["output_files"].append(bb_path)
+
+                    #parameters["bounding_boxes"] = results["bounding_boxes"]
+
+            if "centroids" in parameters["vector_outputs"]:
+                centroids_path = processed_filepath.replace(".shp", "_vector_centroids.shp")
+                convert_shapefile_to_geomtype(processed_filepath
+                                            , centroids_path
+                                            , geom_type="centroid")
+                
+                parameters["output_files"].append(centroids_path)
+
+                #parameters["centroids"] = results["centroids"]
 
 
         
@@ -1068,100 +1932,144 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
             processed_filepath = os.path.join(parameters["output_path"], parameters["prefix"] + "_raster.tif")
 
             print(processed_filepath)
+            print("Merging using GDAL")
 
-            import rasterio as rio
-            from rasterio.merge import merge
+            import importlib
 
+            if importlib.util.find_spec("osgeo") is not None:
+
+                from osgeo import gdal
             
-
-
-            def batch_merge(tile_paths, batch_size=100):
-                mosaics = []
-                for i in range(0, len(tile_paths), batch_size):
-                    batch = tile_paths[i:i+batch_size]
-                    srcs = [rio.open(p) for p in batch]
-                    mosaic, out_transform = merge(srcs,
-                                                  method="max",        # alternatives: "last", "min", "max", numpy.mean
-                                                    nodata=srcs[0].nodata, # keeps NoData consistent
-                                                    precision=10           # rounding in the affine transform (optional)
-                                                  
-                                                  )
-                    for src in srcs:
-                        src.close()
-                    mosaics.append((mosaic, out_transform))
-                # Merge batch mosaics
-                #srcs = [rio.io.MemoryFile().open(driver='GTiff', count=m.shape[0], height=m.shape[1], width=m.shape[2], dtype=m.dtype, transform=t) for m, t in mosaics]
-
-                srcs = []
-                for m, t in mosaics:
-                    profile = {
-                        'driver': 'GTiff',
-                        'count': m.shape[0],
-                        'height': m.shape[1],
-                        'width': m.shape[2],
-                        'dtype': m.dtype,
-                        'transform': t
-                    }
-                    memfile = rio.io.MemoryFile()
-                    with memfile.open(**profile) as dataset:
-                        dataset.write(m)
-                    srcs.append(memfile.open())
-
-
-                final_mosaic, final_transform = merge(srcs,
-                                                      method="max",        # alternatives: "last", "min", "max", numpy.mean
-                                                        nodata=srcs[0].nodata, # keeps NoData consistent
-                                                        precision=10           # rounding in the affine transform (optional)
-                                                      )
-
-                for src in srcs:
-                    src.close()
-
+                merge_raster_gdal(results["tiles_processed"]
+                                  , processed_filepath
+                                  , data_type=gdal.GDT_Float32
+                                  , progress_callback=progress_callback
+                                  , interruption_check=interruption_check
+                                  )
+            
                 
-                return final_mosaic, final_transform
 
-            if len(results["tiles_processed"]) > 1:
+            elif importlib.util.find_spec("qgis") is not None:
 
-                mosaic, out_transform = batch_merge(results["tiles_processed"])
+                import processing
+                from osgeo import gdal
+
+                # list all input raster files
+                #input_raster_list = glob.glob(os.path.join(processed_filepath, "*.tif"))
+
+                # Determine DATA_TYPE from the first tile
+                first_tile = results["tiles_processed"][0]
+                ds = gdal.Open(first_tile)
+                data_type = ds.GetRasterBand(1).DataType if ds is not None else 0  # default to Byte if not found
+
+                task_parameters = {
+                    'INPUT': results["tiles_processed"],
+                    'PCT': False,
+                    'SEPARATE': False,
+                    'NODATA_INPUT': None,
+                    'NODATA_OUTPUT': None,
+                    'OPTIONS': '',
+                    'EXTRA': '',
+                    'DATA_TYPE': 5, # Float32
+                    'OUTPUT': processed_filepath
+                }
+                processing.run("gdal:merge", task_parameters)
 
             else:
 
-                srcs = [rio.open(p) for p in results["tiles_processed"]]
-   
+                import rasterio as rio
+                from rasterio.merge import merge
 
-                mosaic, out_transform = merge(
-                    srcs,
-                    method="max",        # alternatives: "last", "min", "max", numpy.mean
-                    nodata=srcs[0].nodata, # keeps NoData consistent
-                    precision=10           # rounding in the affine transform (optional)
-                )
-
-            with rio.open(input_raster_path) as ref:
-                from rasterio.windows import from_bounds
-                # window covering original's bounds, expressed in mosaic pixel coords
-                win = from_bounds(*ref.bounds, transform=out_transform)
-                win = win.round_offsets().round_lengths()  # ensure integer indices
-
-                r0, c0 = int(win.row_off), int(win.col_off)
-                h,  w  = int(win.height),  int(win.width)
-
-                cropped = mosaic[:, r0:r0+h, c0:c0+w]
-                transform_cropped = rio.windows.transform(win, out_transform)
-
-                # 3) Build output profile (keep your original creation options if any)
-                tempsrc = rio.open(results["tiles_processed"][0])
-                meta = tempsrc.meta.copy()
-                meta.update(
-                    height=h,
-                    width=w,
-                    transform=transform_cropped,
-                    count=cropped.shape[0]
-                    # optionally keep compression/etc:
-                    # compress='deflate', tiled=True, predictor=2
-                )
                 
-                with rio.open(processed_filepath, "w", **meta) as dst:
-                    dst.write(cropped)
+
+
+                def batch_merge(tile_paths, batch_size=100):
+                    mosaics = []
+                    for i in range(0, len(tile_paths), batch_size):
+                        batch = tile_paths[i:i+batch_size]
+                        srcs = [rio.open(p) for p in batch]
+                        mosaic, out_transform = merge(srcs,
+                                                    method="max",        # alternatives: "last", "min", "max", numpy.mean
+                                                        nodata=srcs[0].nodata, # keeps NoData consistent
+                                                        precision=10           # rounding in the affine transform (optional)
+                                                    
+                                                    )
+                        for src in srcs:
+                            src.close()
+                        mosaics.append((mosaic, out_transform))
+                    # Merge batch mosaics
+                    #srcs = [rio.io.MemoryFile().open(driver='GTiff', count=m.shape[0], height=m.shape[1], width=m.shape[2], dtype=m.dtype, transform=t) for m, t in mosaics]
+
+                    srcs = []
+                    for m, t in mosaics:
+                        profile = {
+                            'driver': 'GTiff',
+                            'count': m.shape[0],
+                            'height': m.shape[1],
+                            'width': m.shape[2],
+                            'dtype': m.dtype,
+                            'transform': t
+                        }
+                        memfile = rio.io.MemoryFile()
+                        with memfile.open(**profile) as dataset:
+                            dataset.write(m)
+                        srcs.append(memfile.open())
+
+
+                    final_mosaic, final_transform = merge(srcs,
+                                                        method="max",        # alternatives: "last", "min", "max", numpy.mean
+                                                            nodata=srcs[0].nodata, # keeps NoData consistent
+                                                            precision=10           # rounding in the affine transform (optional)
+                                                        )
+
+                    for src in srcs:
+                        src.close()
+
+                    
+                    return final_mosaic, final_transform
+
+                if len(results["tiles_processed"]) > 1:
+
+                    mosaic, out_transform = batch_merge(results["tiles_processed"])
+
+                else:
+
+                    srcs = [rio.open(p) for p in results["tiles_processed"]]
+    
+
+                    mosaic, out_transform = merge(
+                        srcs,
+                        method="max",        # alternatives: "last", "min", "max", numpy.mean
+                        nodata=srcs[0].nodata, # keeps NoData consistent
+                        precision=10           # rounding in the affine transform (optional)
+                    )
+
+                with rio.open(input_raster_path) as ref:
+                    from rasterio.windows import from_bounds
+                    # window covering original's bounds, expressed in mosaic pixel coords
+                    win = from_bounds(*ref.bounds, transform=out_transform)
+                    win = win.round_offsets().round_lengths()  # ensure integer indices
+
+                    r0, c0 = int(win.row_off), int(win.col_off)
+                    h,  w  = int(win.height),  int(win.width)
+
+                    cropped = mosaic[:, r0:r0+h, c0:c0+w]
+                    transform_cropped = rio.windows.transform(win, out_transform)
+
+                    # 3) Build output profile (keep your original creation options if any)
+                    tempsrc = rio.open(results["tiles_processed"][0])
+                    meta = tempsrc.meta.copy()
+                    meta.update(
+                        height=h,
+                        width=w,
+                        transform=transform_cropped,
+                        count=cropped.shape[0]
+                        # optionally keep compression/etc:
+                        # compress='deflate', tiled=True, predictor=2
+                    )
+                    
+                    with rio.open(processed_filepath, "w", **meta) as dst:
+                        dst.write(cropped)
 
             # meta = srcs[0].meta.copy()
             # meta.update(
@@ -1200,8 +2108,9 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
 
             # Model output
             processed_filepath = os.path.join(parameters["output_path"], parameters["prefix"] + "_raster.tif")
-            parameters["output_files"].append(processed_filepath)
 
+            if "grayscale" in parameters["raster_outputs"]:
+                parameters["output_files"].append(processed_filepath)
 
             # Add other outputs
 
@@ -1244,8 +2153,12 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
                 
                 
 
+                #import rasterio as rio
+                #np2tif_2_gdal(pred_binary, processed_filepath, binary_path, output_dtype=None)
+                from osgeo import gdal
+                #pred_binary = (pred_binary*255).astype(np.uint8)
+                np2tif_2_gdal(pred_binary, processed_filepath, binary_path, output_dtype=gdal.GDT_Byte)
 
-                np2tif_2(pred_binary, processed_filepath, binary_path, rio.float32)
                 #watershed_path = binary_path.replace("_raster_binary","_raster_binary_watershed")
                 #np2tif_2(crowns_mask, processed_filepath, watershed_path, rio.uint8)
 
@@ -1257,7 +2170,9 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
             if len(parameters["vector_outputs"]) > 0:
 
                 # Generate vector outputs
-                results = save_shapefile_polygon_binary_raster(parameters)
+                #results = save_shapefile_polygon_binary_raster(parameters)
+                parameters["binary_raster_path"] = processed_filepath
+                results = save_shapefile_polygon_binary_raster_gdal(parameters)
 
                 # cocatenate results output files with parameters["output_files"]
                 parameters["output_files"].extend(results["output_files"])
@@ -1667,26 +2582,27 @@ def postprocess_yolo_output(output, conf_thres=0.25, iou_thres=0.45, input_shape
 
     return xyxy, scores
 
-import rasterio as rio
-def np2tif_2(data, filepath_tif, filepath_output, output_dtype=rio.uint8):
+# import rasterio as rio
+# def np2tif_2(data, filepath_tif, filepath_output, output_dtype=rio.uint8):
+    
 
-    # Load original tif file and copy metadata
-    orig_img = rio.open(filepath_tif)
-    out_meta = orig_img.meta.copy()
-    out_meta.update({'count':1},indexes=1)
-    out_meta.update({'dtype': output_dtype})  # Ensure output dtype is set in metadata
+#     # Load original tif file and copy metadata
+#     orig_img = rio.open(filepath_tif)
+#     out_meta = orig_img.meta.copy()
+#     out_meta.update({'count':1},indexes=1)
+#     out_meta.update({'dtype': output_dtype})  # Ensure output dtype is set in metadata
 
-    # Ensure data is 2D for single-band output
-    data = np.squeeze(data)
-    if data.ndim == 3 and data.shape[0] == 1:
-        data = data[0]
-    if data.ndim != 2:
-        raise ValueError(f"Data for single-band GeoTIFF must be 2D, got shape {data.shape}")
+#     # Ensure data is 2D for single-band output
+#     data = np.squeeze(data)
+#     if data.ndim == 3 and data.shape[0] == 1:
+#         data = data[0]
+#     if data.ndim != 2:
+#         raise ValueError(f"Data for single-band GeoTIFF must be 2D, got shape {data.shape}")
 
-    # Save file
-    with rio.open(filepath_output, "w", **out_meta) as dst:
-        print("save file")
-        dst.write(data.astype(output_dtype), 1)
+#     # Save file
+#     with rio.open(filepath_output, "w", **out_meta) as dst:
+#         print("save file")
+#         dst.write(data.astype(output_dtype), 1)
 
 # def model_inference(parameters, progress_callback = None, interruption_check = None):
 
@@ -2126,7 +3042,8 @@ def model_inference(parameters, progress_callback = None, interruption_check = N
                                     , 'output_path': output_path
                                     })
             
-            if is_raster_empty(tile):
+            #if is_raster_empty(tile):
+            if is_raster_empty_gdal(tile):
                 continue
 
             #************************************
@@ -2193,8 +3110,13 @@ def model_inference(parameters, progress_callback = None, interruption_check = N
                 print(pred.shape)
                 print(pred.dtype)
 
-                if "grayscale" in parameters["raster_outputs"]:
-                    np2tif_2(pred, tile, processed_filepath, output_dtype=rio.float32)
+                # if "grayscale" in parameters["raster_outputs"]:
+                #     #np2tif_2(pred, tile, processed_filepath, output_dtype=rio.float32)
+                #     from osgeo import gdal
+                #     np2tif_2_gdal(pred, tile, processed_filepath, output_dtype=gdal.GDT_Float32)
+
+                from osgeo import gdal
+                np2tif_2_gdal(pred, tile, processed_filepath, output_dtype=gdal.GDT_Float32)
                 
             elif model == 'DeepForest':
 
@@ -2216,10 +3138,23 @@ def model_inference(parameters, progress_callback = None, interruption_check = N
 
                 boxes_df = pd.DataFrame(boxes, columns=['xmin', 'ymin', 'xmax', 'ymax'])
 
-                boxes_gdf = bb_2_geodataframe(boxes_df, temp_parameters)
+                # Use OGR-only version to avoid GeoPandas threading issues (DeepForest model)
+                temp_file = bb_2_shapefile_ogr(boxes_df, temp_parameters)
+                import shutil
+                if os.path.exists(temp_file):
+                    shutil.copy2(temp_file, processed_filepath)
+                    # Copy associated files (.dbf, .shx, .prj)
+                    base_temp = temp_file.replace('.shp', '')
+                    base_processed = processed_filepath.replace('.shp', '')
+                    for ext in ['.dbf', '.shx', '.prj']:
+                        if os.path.exists(base_temp + ext):
+                            shutil.copy2(base_temp + ext, base_processed + ext)
 
-                # save shapefile
-                boxes_gdf.to_file(processed_filepath, driver='ESRI Shapefile')
+                # ORIGINAL CALL (kept for reference, commented due to threading issues):
+                # boxes_gdf = bb_2_geodataframe_gdal(boxes_df, temp_parameters)
+                # boxes_gdf.to_file(processed_filepath, driver='ESRI Shapefile')
+                # boxes_gdf = bb_2_geodataframe_gdal(boxes_df, temp_parameters)
+                # boxes_gdf.to_file(processed_filepath, driver='ESRI Shapefile')
 
 
             elif model == 'Mask R-CNN':
@@ -2238,8 +3173,14 @@ def model_inference(parameters, progress_callback = None, interruption_check = N
                 # Bitwise OR over the 0th axis
                 merged_image = np.bitwise_or.reduce(masks)
 
-                if "binary" in parameters["raster_outputs"]:
-                    np2tif_2(merged_image, tile, processed_filepath, output_dtype=rio.uint8)
+                # if "binary" in parameters["raster_outputs"]:
+                #     #np2tif_2(merged_image, tile, processed_filepath, output_dtype=rio.uint8)
+                #     from osgeo import gdal
+                #     np2tif_2_gdal(merged_image, tile, processed_filepath, output_dtype=gdal.GDT_Byte)
+
+                # Save binary
+                from osgeo import gdal
+                np2tif_2_gdal(merged_image, tile, processed_filepath, output_dtype=gdal.GDT_Byte)
 
             elif model == "VHRTrees":
 
@@ -2267,10 +3208,21 @@ def model_inference(parameters, progress_callback = None, interruption_check = N
                 #boxes_df = pd.DataFrame(boxes, columns=['xmin', 'ymin', 'xmax', 'ymax', 'score'])
                 boxes_df = pd.DataFrame(boxes, columns=['xmin', 'ymin', 'xmax', 'ymax'])
 
-                boxes_gdf = bb_2_geodataframe(boxes_df, temp_parameters)
+                # Use OGR-only version to avoid GeoPandas threading issues (VHRTrees model)
+                temp_file = bb_2_shapefile_ogr(boxes_df, temp_parameters)
+                import shutil
+                if os.path.exists(temp_file):
+                    shutil.copy2(temp_file, processed_filepath)
+                    # Copy associated files (.dbf, .shx, .prj)
+                    base_temp = temp_file.replace('.shp', '')
+                    base_processed = processed_filepath.replace('.shp', '')
+                    for ext in ['.dbf', '.shx', '.prj']:
+                        if os.path.exists(base_temp + ext):
+                            shutil.copy2(base_temp + ext, base_processed + ext)
 
-                # save shapefile
-                boxes_gdf.to_file(processed_filepath, driver='ESRI Shapefile')
+                # ORIGINAL CALL (kept for reference, commented due to threading issues):
+                # boxes_gdf = bb_2_geodataframe_gdal(boxes_df, temp_parameters)
+                # boxes_gdf.to_file(processed_filepath, driver='ESRI Shapefile')
 
 
             elif model == "Custom ONNX Model":
@@ -2300,10 +3252,21 @@ def model_inference(parameters, progress_callback = None, interruption_check = N
                 #boxes_df = pd.DataFrame(boxes, columns=['xmin', 'ymin', 'xmax', 'ymax', 'score'])
                 boxes_df = pd.DataFrame(boxes, columns=['xmin', 'ymin', 'xmax', 'ymax'])
 
-                boxes_gdf = bb_2_geodataframe(boxes_df, temp_parameters)
+                # Use OGR-only version to avoid GeoPandas threading issues (Custom ONNX model)
+                temp_file = bb_2_shapefile_ogr(boxes_df, temp_parameters)
+                import shutil
+                if os.path.exists(temp_file):
+                    shutil.copy2(temp_file, processed_filepath)
+                    # Copy associated files (.dbf, .shx, .prj)
+                    base_temp = temp_file.replace('.shp', '')
+                    base_processed = processed_filepath.replace('.shp', '')
+                    for ext in ['.dbf', '.shx', '.prj']:
+                        if os.path.exists(base_temp + ext):
+                            shutil.copy2(base_temp + ext, base_processed + ext)
 
-                # save shapefile
-                boxes_gdf.to_file(processed_filepath, driver='ESRI Shapefile')
+                # ORIGINAL CALL (kept for reference, commented due to threading issues):
+                # boxes_gdf = bb_2_geodataframe_gdal(boxes_df, temp_parameters)
+                # boxes_gdf.to_file(processed_filepath, driver='ESRI Shapefile')
 
             else:
                 print("No model selected")
@@ -2344,4 +3307,557 @@ def postprocess(parameters, progress_callback = None, interruption_check = None)
     # Post process
         # Generate vector outputs
         if len(parameters["vector_outputs"]) > 0:
-            save_shapefile_polygon_binary_raster(parameters)
+            #save_shapefile_polygon_binary_raster(parameters)
+            save_shapefile_polygon_binary_raster_gdal(parameters)
+
+
+#*********************************
+
+def raster2vector(parameters, progress_callback = None, interruption_check = None):
+    
+    print("Running raster2vector task...")
+
+    parameters["output_files"] = []
+
+    # Use OGR-only version to avoid GeoPandas/PyArrow threading issues
+    #results = save_shapefile_polygon_binary_raster_ogr(parameters)
+    results = save_shapefile_polygon_binary_raster_gdal(parameters)
+    
+    # ORIGINAL FUNCTIONS (kept for reference, commented due to threading issues):
+    # results = save_shapefile_polygon_binary_raster(parameters)  # Original GeoPandas version
+    # results = save_shapefile_polygon_binary_raster_gdal(parameters)  # GDAL version with GeoPandas
+
+    # cocatenate results output files with parameters["output_files"]
+    parameters["output_files"].extend(results["output_files"])
+
+    return parameters
+
+def filter_area(parameters, progress_callback = None, interruption_check = None):
+
+    print("Running filter_area task...")
+
+    parameters["output_files"] = []
+
+    area_value = parameters["filter_area_area"]
+    input_shp = parameters["input_raster_path"]
+    output_dir = parameters["output_path"]
+    output_prefix = parameters["prefix"]
+    output_filename = os.path.join(output_dir, output_prefix + "_vector.shp")
+
+    import importlib
+
+    if importlib.util.find_spec("osgeo") is not None:
+
+        
+
+        from osgeo import ogr
+
+        driver = ogr.GetDriverByName("ESRI Shapefile")
+        ds = driver.Open(input_shp, 0)
+        layer = ds.GetLayer()
+        out_driver = ogr.GetDriverByName("ESRI Shapefile")
+        out_ds = out_driver.CreateDataSource(output_filename)
+        out_layer = out_ds.CreateLayer("filtered", layer.GetSpatialRef(), ogr.wkbPolygon)
+        # Create fields
+        for i in range(layer.GetLayerDefn().GetFieldCount()):
+            field_defn = layer.GetLayerDefn().GetFieldDefn(i)
+            out_layer.CreateField(field_defn)
+        # Add features
+        for feat in layer:
+            area = feat.GetField("area_m2")
+            if area is not None and area <= area_value:
+                out_feat = ogr.Feature(out_layer.GetLayerDefn())
+                for i in range(out_layer.GetLayerDefn().GetFieldCount()):
+                    out_feat.SetField(out_layer.GetLayerDefn().GetFieldDefn(i).GetNameRef(), feat.GetField(i))
+                out_feat.SetGeometry(feat.GetGeometryRef().Clone())
+                out_layer.CreateFeature(out_feat)
+                out_feat = None
+        ds = None
+        out_ds = None
+
+    
+    else:
+
+        import geopandas as gpd
+
+        gdf = gpd.read_file(parameters["input_raster_path"])       
+        gdf = gdf[gdf["area_m2"] <= area_value]      
+    
+        gdf.to_file(output_filename, index=False)
+
+
+    parameters["output_files"].append(output_filename)
+
+    return parameters
+
+
+#*********************************
+
+# === GDAL-only versions ===
+def np2tif_2_gdal(data, filepath_tif, filepath_output, output_dtype=None):
+    """
+    Save a numpy array as a GeoTIFF using GDAL, copying geotransform and projection from a reference file.
+    """
+
+    #     # Ensure data is 2D for single-band output
+    data = np.squeeze(data)
+    if data.ndim == 3 and data.shape[0] == 1:
+        data = data[0]
+    if data.ndim != 2:
+        raise ValueError(f"Data for single-band GeoTIFF must be 2D, got shape {data.shape}")
+
+
+    from osgeo import gdal, gdal_array
+    ds = gdal.Open(filepath_tif)
+    gt = ds.GetGeoTransform()
+    proj = ds.GetProjection()
+    if output_dtype is None:
+        output_dtype = ds.GetRasterBand(1).DataType
+    driver = gdal.GetDriverByName('GTiff')
+    print(data.shape)
+    print(output_dtype)
+    height, width = data.shape
+    out_ds = driver.Create(filepath_output, width, height, 1, output_dtype)
+    print("after")
+    out_ds.SetGeoTransform(gt)
+    out_ds.SetProjection(proj)
+    out_ds.GetRasterBand(1).WriteArray(data)
+    out_ds.FlushCache()
+    out_ds = None
+
+def is_raster_empty_gdal(tif_path):
+    """
+    Check if a raster is empty (all zeros or all NODATA) using GDAL.
+    """
+    from osgeo import gdal
+    ds = gdal.Open(tif_path)
+    if ds is None or ds.RasterCount == 0:
+        return True
+    arr = ds.GetRasterBand(1).ReadAsArray()
+    nodata = ds.GetRasterBand(1).GetNoDataValue()
+    if nodata is not None:
+        mask = (arr == nodata)
+        if mask.all():
+            return True
+    if (arr == 0).all():
+        return True
+    return False
+
+def zonal_stats_gdal(gdf, raster_path, stats=['mean', 'min', 'max']):
+    """
+    Zonal statistics using GDAL and rasterio.features.rasterize replacement.
+    """
+    from osgeo import gdal
+    import numpy as np
+    ds = gdal.Open(raster_path)
+    band = ds.GetRasterBand(1)
+    gt = ds.GetGeoTransform()
+    arr = band.ReadAsArray()
+    results = []
+    # Use rasterio.features.rasterize replacement: rasterize polygons manually
+    # For simplicity, use shapely and numpy
+    for idx, row in gdf.iterrows():
+        mask = np.zeros(arr.shape, dtype=np.uint8)
+        try:
+            import shapely.geometry
+            from shapely.geometry import mapping
+            import cv2 as cv
+            # Rasterize polygon using OpenCV fillPoly
+            poly = row['geometry']
+            if poly.is_empty:
+                results.append({s: None for s in stats})
+                continue
+            # Convert polygon coordinates to pixel indices
+            coords = np.array(list(poly.exterior.coords))
+            px = ((coords[:, 0] - gt[0]) / gt[1]).astype(int)
+            py = ((coords[:, 1] - gt[3]) / gt[5]).astype(int)
+            pts = np.stack([px, py], axis=1)
+            cv.fillPoly(mask, [pts], 1)
+            masked = arr[mask == 1]
+            stat = {}
+            if 'mean' in stats:
+                stat['mean'] = float(np.mean(masked)) if masked.size > 0 else None
+            if 'min' in stats:
+                stat['min'] = float(np.min(masked)) if masked.size > 0 else None
+            if 'max' in stats:
+                stat['max'] = float(np.max(masked)) if masked.size > 0 else None
+            results.append(stat)
+        except Exception:
+            results.append({s: None for s in stats})
+    return results
+
+def save_shapefile_polygon_binary_raster_gdal(parameters):
+    """
+    Replacement for save_shapefile_polygon_binary_raster using GDAL for raster reading.
+    """
+    import numpy as np
+    import cv2 as cv
+    from osgeo import gdal, ogr, osr
+    import shapely
+    import numpy as np
+    import math
+    
+    results = {}
+    results["output_files"] = []
+    binary_raster_path = parameters["binary_raster_path"]
+    #binary_raster_path = os.path.join(parameters["output_path"], parameters["prefix"] + "_raster.tif")
+    ds = gdal.Open(binary_raster_path)
+    gt = ds.GetGeoTransform()
+    proj = ds.GetProjection()
+    width = ds.RasterXSize
+    height = ds.RasterYSize
+    arr = ds.GetRasterBand(1).ReadAsArray()
+    srs = osr.SpatialReference()
+    srs.ImportFromWkt(proj)
+    try:
+        epsg = int(srs.GetAttrValue('AUTHORITY', 1))
+    except Exception:
+        epsg = 4326
+    # Thresholding
+    thresh = arr
+    if "raster2vector_threshold" in parameters:
+        percentage = parameters["raster2vector_threshold"] / 100.0
+        max_value = np.max(thresh)
+        min_value = np.min(thresh)
+        range0 = max_value - min_value
+        interval = range0 * percentage
+        threshold = min_value + interval
+        thresh = (thresh >= threshold) * 1.0
+    if thresh.dtype == np.float32 or thresh.dtype == np.float64:
+        thresh = (thresh * 255).astype(np.uint8)
+    if len(thresh.shape) == 3 and thresh.shape[2] == 3:
+        thresh = cv.cvtColor(thresh, cv.COLOR_RGB2GRAY)
+    contours, hierarchy = cv.findContours(thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    # Prepare output shapefile
+    output_filename = os.path.join(parameters["output_path"], parameters["prefix"] + "_vector.shp")
+    driver = ogr.GetDriverByName("ESRI Shapefile")
+    if os.path.exists(output_filename):
+        driver.DeleteDataSource(output_filename)
+    out_ds = driver.CreateDataSource(output_filename)
+    out_layer = out_ds.CreateLayer("trees", srs, ogr.wkbPolygon)
+    # Add fields
+    field_defs = [
+        ("ID", ogr.OFTInteger),
+        #("Class", ogr.OFTString),
+        ("label", ogr.OFTString),
+        ("area_m2", ogr.OFTReal),
+        ("perim_m", ogr.OFTReal),
+        ("diam_m", ogr.OFTReal),
+        ("lat", ogr.OFTReal),
+        ("lon", ogr.OFTReal),
+        ("circ", ogr.OFTReal),
+        ("h_mean", ogr.OFTReal),
+        ("h_min", ogr.OFTReal),
+        ("h_max", ogr.OFTReal)
+    ]
+    for fname, ftype in field_defs:
+        field = ogr.FieldDefn(fname, ftype)
+        out_layer.CreateField(field)
+    # Transform to WGS84 if needed
+    tgt_srs = osr.SpatialReference()
+    tgt_srs.ImportFromEPSG(4326)
+    coord_transform = osr.CoordinateTransformation(srs, tgt_srs)
+    count = 0
+    for contour in contours:
+        new_contour = np.squeeze(contour)
+        if new_contour.ndim < 2:
+            continue
+        coord_polygon = []
+        for point in new_contour:
+            x = point[0]
+            y = point[1]
+            geo_x = gt[0] + x * gt[1] + y * gt[2]
+            geo_y = gt[3] + x * gt[4] + y * gt[5]
+            coord_polygon.append((geo_x, geo_y))
+        if len(coord_polygon) > 2:
+            polygon_object = shapely.geometry.Polygon(coord_polygon)
+            polygon_object = shapely.make_valid(polygon_object)
+            # Handle GeometryCollection and MultiPolygon by iterating over their geometries
+            geometries = []
+            if isinstance(polygon_object, shapely.geometry.Polygon):
+                geometries = [polygon_object]
+            elif isinstance(polygon_object, shapely.geometry.MultiPolygon):
+                geometries = list(polygon_object.geoms)
+            elif isinstance(polygon_object, shapely.geometry.GeometryCollection):
+                for geom in polygon_object.geoms:
+                    if isinstance(geom, shapely.geometry.Polygon):
+                        geometries.append(geom)
+                    elif isinstance(geom, shapely.geometry.MultiPolygon):
+                        geometries.extend(list(geom.geoms))
+            for poly in geometries:
+                if not poly.is_valid or poly.is_empty:
+                    continue
+                # Area and perimeter in meters
+                metric_srs = osr.SpatialReference()
+                metric_srs.ImportFromEPSG(3857)
+                metric_transform = osr.CoordinateTransformation(srs, metric_srs)
+                # Use poly.exterior only for Polygon
+                if hasattr(poly, "exterior") and poly.exterior is not None:
+                    metric_coords = [metric_transform.TransformPoint(x, y)[:2] for x, y in poly.exterior.coords]
+                    metric_poly = shapely.geometry.Polygon(metric_coords)
+                    area_m2 = metric_poly.area
+                    perimeter_m = metric_poly.length
+                    # diameter equivalent from area
+                    diam_m = 2 * np.sqrt(area_m2 / np.pi)
+                    centroid_x, centroid_y = poly.centroid.x, poly.centroid.y
+                    centroid_wgs = coord_transform.TransformPoint(centroid_x, centroid_y)
+                    centroid_lon, centroid_lat = centroid_wgs[0], centroid_wgs[1]
+                    circularity = 0.0
+                    if perimeter_m > 0:
+                        circularity = 4 * math.pi * area_m2 / (perimeter_m ** 2)
+                    # Zonal statistics (h_mean, h_min, h_max)
+                    mask = np.zeros(arr.shape, dtype=np.uint8)
+                    px = ((np.array([p[0] for p in poly.exterior.coords]) - gt[0]) / gt[1]).astype(int)
+                    py = ((np.array([p[1] for p in poly.exterior.coords]) - gt[3]) / gt[5]).astype(int)
+                    pts = np.stack([px, py], axis=1)
+                    cv.fillPoly(mask, [pts], 1)
+                    masked = arr[mask == 1]
+                    h_mean = float(np.mean(masked)) if masked.size > 0 else None
+                    h_min = float(np.min(masked)) if masked.size > 0 else None
+                    h_max = float(np.max(masked)) if masked.size > 0 else None
+                    # Create OGR feature
+                    ring = ogr.Geometry(ogr.wkbLinearRing)
+                    for x, y in poly.exterior.coords:
+                        ring.AddPoint(x, y)
+                    ogr_poly = ogr.Geometry(ogr.wkbPolygon)
+                    ogr_poly.AddGeometry(ring)
+                    feat = ogr.Feature(out_layer.GetLayerDefn())
+                    feat.SetField("ID", count+1)
+                    #feat.SetField("Class", "Tree")
+                    feat.SetField("label", "tree")
+                    feat.SetField("area_m2", float(area_m2))
+                    feat.SetField("perim_m", float(perimeter_m))
+                    feat.SetField("diam_m", float(diam_m))
+                    feat.SetField("lat", float(centroid_lat))
+                    feat.SetField("lon", float(centroid_lon))
+                    feat.SetField("circ", float(circularity))
+                    feat.SetField("h_mean", h_mean if h_mean is not None else -9999)
+                    feat.SetField("h_min", h_min if h_min is not None else -9999)
+                    feat.SetField("h_max", h_max if h_max is not None else -9999)
+                    feat.SetGeometry(ogr_poly)
+                    out_layer.CreateFeature(feat)
+                    feat = None
+                    count += 1
+    
+    # Add bounding box and centroid shapefiles if requested BEFORE closing out_ds
+    if "bounding_boxes" in parameters.get("vector_outputs", []):
+        output_bb = os.path.join(parameters["output_path"], parameters["prefix"] + "_vector_bb.shp")
+        driver = ogr.GetDriverByName("ESRI Shapefile")
+        if os.path.exists(output_bb):
+            driver.DeleteDataSource(output_bb)
+        ds_bb = driver.CreateDataSource(output_bb)
+        layer_bb = ds_bb.CreateLayer("tree_bb", srs, ogr.wkbPolygon)
+        # Copy all fields from out_layer
+        layer_defn = out_layer.GetLayerDefn()
+        for i in range(layer_defn.GetFieldCount()):
+            field_defn = layer_defn.GetFieldDefn(i)
+            layer_bb.CreateField(field_defn)
+        # Create features
+        for i in range(count):
+            feat_bb = ogr.Feature(layer_bb.GetLayerDefn())
+            # Copy field values from main feature
+            feat_main = out_layer.GetFeature(i)
+            for j in range(layer_defn.GetFieldCount()):
+                field_name = layer_defn.GetFieldDefn(j).GetNameRef()
+                feat_bb.SetField(field_name, feat_main.GetField(field_name))
+            # Reindex ID from 1
+            feat_bb.SetField("ID", i + 1)
+            geom = feat_main.GetGeometryRef()
+            bbox = geom.GetEnvelope()
+            ring_bb = ogr.Geometry(ogr.wkbLinearRing)
+            ring_bb.AddPoint(bbox[0], bbox[2])
+            ring_bb.AddPoint(bbox[1], bbox[2])
+            ring_bb.AddPoint(bbox[1], bbox[3])
+            ring_bb.AddPoint(bbox[0], bbox[3])
+            ring_bb.AddPoint(bbox[0], bbox[2])
+            poly_bb = ogr.Geometry(ogr.wkbPolygon)
+            poly_bb.AddGeometry(ring_bb)
+            feat_bb.SetGeometry(poly_bb)
+            layer_bb.CreateFeature(feat_bb)
+            feat_bb = None
+        ds_bb.FlushCache()
+        ds_bb = None
+        results["output_files"].append(output_bb)
+
+    if "centroids" in parameters.get("vector_outputs", []):
+        output_cent = os.path.join(parameters["output_path"], parameters["prefix"] + "_vector_centroids.shp")
+        driver = ogr.GetDriverByName("ESRI Shapefile")
+        if os.path.exists(output_cent):
+            driver.DeleteDataSource(output_cent)
+        ds_cent = driver.CreateDataSource(output_cent)
+        layer_cent = ds_cent.CreateLayer("tree_centroids", srs, ogr.wkbPoint)
+        # Copy all fields from out_layer
+        layer_defn = out_layer.GetLayerDefn()
+        for i in range(layer_defn.GetFieldCount()):
+            field_defn = layer_defn.GetFieldDefn(i)
+            layer_cent.CreateField(field_defn)
+        # Create features
+        for i in range(count):
+            feat_cent = ogr.Feature(layer_cent.GetLayerDefn())
+            # Copy field values from main feature
+            feat_main = out_layer.GetFeature(i)
+            for j in range(layer_defn.GetFieldCount()):
+                field_name = layer_defn.GetFieldDefn(j).GetNameRef()
+                feat_cent.SetField(field_name, feat_main.GetField(field_name))
+            # Reindex ID from 1
+            feat_cent.SetField("ID", i + 1)
+            geom = feat_main.GetGeometryRef()
+            centroid = geom.Centroid()
+            feat_cent.SetGeometry(centroid)
+            layer_cent.CreateFeature(feat_cent)
+            feat_cent = None
+        ds_cent.FlushCache()
+        ds_cent = None
+        results["output_files"].append(output_cent)
+
+    out_ds.FlushCache()
+    out_ds = None
+    results["output_files"].append(output_filename)
+    return results
+
+# def bb_2_geodataframe_gdal(df, parameters):
+#     """
+#     Replacement for bb_2_geodataframe using GDAL for raster info.
+#     """
+#     import pandas as pd
+#     import geopandas as gpd
+#     import shapely.geometry
+#     from osgeo import gdal, osr
+#     input_raster_path = parameters["input_raster_path"]
+#     try:
+#         ds = gdal.Open(input_raster_path)
+#         gt = ds.GetGeoTransform()
+#         proj = ds.GetProjection()
+#         width = ds.RasterXSize
+#         height = ds.RasterYSize
+#         srs = osr.SpatialReference()
+#         srs.ImportFromWkt(proj)
+#         epsg = srs.GetAttrValue('AUTHORITY', 1)
+#         has_epsg = True
+#         extent = (gt[0], gt[3] + height * gt[5], gt[0] + width * gt[1], gt[3])
+#     except Exception:
+#         from PIL import Image
+#         img = Image.open(input_raster_path)
+#         width, height = img.size
+#         extent = (0, 0, width, height)
+#         epsg = None
+#         has_epsg = False
+#     df_tree_polygons_test = pd.DataFrame()
+#     tree_bb = []
+#     count = 0
+#     for index, detection in df.iterrows():
+#         xmin = detection["xmin"]
+#         ymin = detection["ymin"]
+#         xmax = detection["xmax"]
+#         ymax = detection["ymax"]
+#         new_contour = [(xmin, ymin), (xmax, ymin), (xmax, ymax), (xmin, ymax)]
+#         coord_polygon = []
+#         for point in new_contour:
+#             x, y = point
+#             if has_epsg:
+#                 geo_x = gt[0] + x * gt[1] + y * gt[2]
+#                 geo_y = gt[3] + x * gt[4] + y * gt[5]
+#                 new_coord = (geo_x, geo_y)
+#             else:
+#                 new_coord = (x, y - height)
+#             coord_polygon.append(new_coord)
+#         if len(coord_polygon) > 2:
+#             polygon_object = shapely.geometry.Polygon(coord_polygon)
+#             df_item_test = pd.DataFrame({
+#                 #'Class': 'tree', 
+#                 'ID': count, 
+#                 'label': 'tree'}, index=[count])
+#             df_tree_polygons_test = pd.concat((df_tree_polygons_test, df_item_test))
+#             tree_bb.append(polygon_object)
+#             count += 1
+#     gdf_trees = gpd.GeoDataFrame(df_tree_polygons_test, geometry=tree_bb)
+#     if has_epsg and epsg:
+#         gdf_trees = safe_set_crs(gdf_trees, epsg=epsg)
+#     return gdf_trees
+
+# def bb_2_geodataframe_gdal(df, parameters):
+#     """
+#     Convert bounding box DataFrame to a list of polygons and compute area_m2, lat, lon, circularity using only GDAL and numpy.
+#     Returns a list of dicts, each representing a feature.
+#     """
+#     from osgeo import gdal
+#     import numpy as np
+#     import shapely.geometry
+
+#     input_raster_path = parameters["input_raster_path"]
+
+#     try:
+#         ds = gdal.Open(input_raster_path)
+#         gt = ds.GetGeoTransform()
+#         proj = ds.GetProjection()
+#         width = ds.RasterXSize
+#         height = ds.RasterYSize
+#         has_epsg = True
+#         ds = None
+#     except Exception:
+#         width = parameters.get("img_width", None)
+#         height = parameters.get("img_height", None)
+#         gt = None
+#         proj = None
+#         has_epsg = False
+
+#     features = []
+#     for index, detection in df.iterrows():
+#         xmin = detection["xmin"]
+#         ymin = detection["ymin"]
+#         xmax = detection["xmax"]
+#         ymax = detection["ymax"]
+
+#         # Convert pixel coordinates to geo coordinates if possible
+#         if has_epsg and gt:
+#             def px2geo(x, y):
+#                 geo_x = gt[0] + x * gt[1] + y * gt[2]
+#                 geo_y = gt[3] + x * gt[4] + y * gt[5]
+#                 return (geo_x, geo_y)
+#             coords = [
+#                 px2geo(xmin, ymin),
+#                 px2geo(xmax, ymin),
+#                 px2geo(xmax, ymax),
+#                 px2geo(xmin, ymax)
+#             ]
+#         else:
+#             coords = [
+#                 (xmin, ymin),
+#                 (xmax, ymin),
+#                 (xmax, ymax),
+#                 (xmin, ymax)
+#             ]
+
+#         # Create polygon and calculate properties
+#         polygon = shapely.geometry.Polygon(coords)
+#         area = polygon.area
+#         perim = polygon.length
+#         centroid = polygon.centroid
+#         lon = centroid.x
+#         lat = centroid.y
+#         circularity = 4 * np.pi * area / perim**2 if perim > 0 else 0
+
+#         features.append({
+#             "geometry": polygon,
+#             "area_m2": area,
+#             "lon": lon,
+#             "lat": lat,
+#             "circularity": circularity,
+#             "ID": index,
+#             "Class": "tree",
+#             "label": "tree"
+#         })
+
+#     return features
+
+def is_geotif_gdal(filepath):
+    """
+    Check if a file is a valid GeoTIFF using GDAL.
+    Returns True if the file is a GeoTIFF, False otherwise.
+    """
+    from osgeo import gdal
+    ds = gdal.Open(filepath)
+    if ds is None:
+        return False
+    driver = ds.GetDriver().ShortName
+    return driver == 'GTiff'

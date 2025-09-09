@@ -28,7 +28,7 @@
            <x>0</x>
            <y>0</y>
            <width>703</width>
-           <height>1008</height>
+           <height>1002</height>
           </rect>
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -467,8 +467,11 @@ padding: 2px 4px;</string>
                      <property name="enabled">
                       <bool>true</bool>
                      </property>
+                     <property name="toolTip">
+                      <string>Tree Cover (binary mask: 1 = tree, 0 = background), formely Binary</string>
+                     </property>
                      <property name="text">
-                      <string>Binary</string>
+                      <string>Tree Cover</string>
                      </property>
                      <property name="checked">
                       <bool>true</bool>
@@ -477,8 +480,11 @@ padding: 2px 4px;</string>
                    </item>
                    <item>
                     <widget class="QCheckBox" name="checkBox_raster_grayscale">
+                     <property name="toolTip">
+                      <string>Canopy Height (grayscale: pixel values in meters = height), formely Grayscale</string>
+                     </property>
                      <property name="text">
-                      <string>Grayscale</string>
+                      <string>Canopy Height</string>
                      </property>
                     </widget>
                    </item>
@@ -511,8 +517,11 @@ padding: 2px 4px;</string>
                      <property name="enabled">
                       <bool>true</bool>
                      </property>
+                     <property name="toolTip">
+                      <string>Tree Crowns (outlines of detected tree cover), formely Polygons</string>
+                     </property>
                      <property name="text">
-                      <string>Polygons</string>
+                      <string>Tree Crowns</string>
                      </property>
                      <property name="checked">
                       <bool>true</bool>
@@ -521,15 +530,21 @@ padding: 2px 4px;</string>
                    </item>
                    <item>
                     <widget class="QCheckBox" name="checkBox_vector_bounding_boxes">
+                     <property name="toolTip">
+                      <string>Tree Bounding Boxes (rectangles enclosing trees), formerly Bounding Boxes</string>
+                     </property>
                      <property name="text">
-                      <string>Bounding Boxes</string>
+                      <string>Tree Bounding Boxes</string>
                      </property>
                     </widget>
                    </item>
                    <item>
                     <widget class="QCheckBox" name="checkBox_vector_centroids">
+                     <property name="toolTip">
+                      <string>Tree Locations (centroid point for each tree), formerly Centroids</string>
+                     </property>
                      <property name="text">
-                      <string>Centroids</string>
+                      <string>Tree Locations</string>
                      </property>
                     </widget>
                    </item>

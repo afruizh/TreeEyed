@@ -85,8 +85,8 @@ class TreeEyedInferenceAlgorithm(QgsProcessingAlgorithm):
                 , "vector_outputs": []
                 }
             ,'Mask R-CNN':{
-                "raster_outputs":[]
-                , "vector_outputs": ["polygons"]
+                "raster_outputs":["binary"]
+                , "vector_outputs": []
                 }
             ,'DeepForest':{
                 "raster_outputs":[]
@@ -206,7 +206,7 @@ class TreeEyedInferenceAlgorithm(QgsProcessingAlgorithm):
         # QgsApplication.taskManager().addTask(qgstask)  
 
         def custom_progress_callback(info):
-            progress = info["progress"]*100
+            progress = info["progress"]*90 # use 90 to avoid reaching 100% before the end
             feedback.setProgress(progress)
 
         def custom_interruption_check():
@@ -361,8 +361,8 @@ class TreeEyedInferenceAlgorithm(QgsProcessingAlgorithm):
         <ul>
         <li><b>Output file</b>: Specify the output file path. For some models, output is a raster; for others, a shapefile.
             <ul>
-                <li>HighResCanopyHeight: <b>.tif</b> (GeoTIFF raster)</li>
-                <li>Mask R-CNN, DeepForest, VHRTrees: <b>.shp</b> (ESRI Shapefile)</li>
+                <li>HighResCanopyHeight, Mask R-CNN: <b>.tif</b> (GeoTIFF raster)</li>
+                <li>DeepForest, VHRTrees: <b>.shp</b> (ESRI Shapefile)</li>
             </ul>
         </li>
         </ul>

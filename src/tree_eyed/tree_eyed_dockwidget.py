@@ -355,6 +355,14 @@ class TreeEyedDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.mGroupBox_Custom.setVisible(False)
         self.mGroupBox_result_types.setVisible(True)
 
+
+        # Enable all checkboxes
+        self.checkBox_raster_binary.setEnabled(True)
+        self.checkBox_raster_grayscale.setEnabled(True)
+        self.checkBox_vector_polygons.setEnabled(True)
+        self.checkBox_vector_bounding_boxes.setEnabled(True)
+        self.checkBox_vector_centroids.setEnabled(True)
+
         if text == "HighResCanopyHeight":
             #self.mGroupBox_HRCH.setVisible(True)
 
@@ -370,6 +378,8 @@ class TreeEyedDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.checkBox_vector_bounding_boxes.setChecked(False)
             self.checkBox_vector_centroids.setChecked(False)
 
+            self.checkBox_raster_grayscale.setEnabled(False)
+
         elif text == "Mask R-CNN":
 
             self.checkBox_raster_binary.setVisible(True)
@@ -378,11 +388,13 @@ class TreeEyedDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.checkBox_vector_bounding_boxes.setVisible(True)
             self.checkBox_vector_centroids.setVisible(True)
 
-            self.checkBox_raster_binary.setChecked(False)
+            self.checkBox_raster_binary.setChecked(True)
             self.checkBox_raster_grayscale.setChecked(False)
-            self.checkBox_vector_polygons.setChecked(True)
+            self.checkBox_vector_polygons.setChecked(False)
             self.checkBox_vector_bounding_boxes.setChecked(False)
             self.checkBox_vector_centroids.setChecked(False)
+
+            self.checkBox_raster_binary.setEnabled(False)
 
         elif text == "DeepForest":
 
@@ -397,6 +409,8 @@ class TreeEyedDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.checkBox_vector_polygons.setChecked(False)
             self.checkBox_vector_bounding_boxes.setChecked(True)
             self.checkBox_vector_centroids.setChecked(False)
+
+            self.checkBox_vector_bounding_boxes.setEnabled(False)
 
         elif text == "DetectTree" :
 
@@ -419,6 +433,8 @@ class TreeEyedDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.checkBox_vector_polygons.setChecked(False)
             self.checkBox_vector_bounding_boxes.setChecked(True)
             self.checkBox_vector_centroids.setChecked(False)
+
+            self.checkBox_vector_bounding_boxes.setEnabled(False)
 
         elif text == "Custom ONNX Model":
 

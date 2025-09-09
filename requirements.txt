@@ -1,12 +1,12 @@
 # Requirements for TreeEyed Docker container
 # Add any additional dependencies as needed
-rasterio==1.4.3
+#rasterio==1.4.3
 opencv-python-headless==4.11.0.86
 gdown==5.2.0
 onnxruntime-gpu==1.22.0
 pycocotools==2.0.8
 shapely==2.0.6
-geopandas==1.0.1
+#geopandas==1.0.1
 Pyside6==6.9.2
 # Uncomment if needed:
 # pyproj==3.6.1

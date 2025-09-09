@@ -80,7 +80,7 @@ class WorkerTask(QgsTask):
         self.params = params
 
     def _handle_progress(self, info):
-        self.setProgress(info["progress"]*100)
+        self.setProgress(info["progress"]*90) # use 90 to avoid reaching 100% before the end
 
     def run(self):
         """Long-running task."""
@@ -103,6 +103,8 @@ class WorkerTask(QgsTask):
 
         self.task_finished.emit(results)
 
+        self.results = results
+
         return True
 
     def finished(self, result):
@@ -110,9 +112,10 @@ class WorkerTask(QgsTask):
         if not result:
             iface.messageBar().pushMessage("Error", "Task could not be completed", level=Qgis.Critical)
         else:
-            iface.messageBar().pushMessage("Finished", self.description() + " completed", level=Qgis.Success)
-        
-        return  
+            #iface.messageBar().pushMessage("Finished", self.description() + " completed", level=Qgis.Success)
+            iface.messageBar().pushMessage(self.results["status"].capitalize(), self.description() + ": " + self.results["log"], level=Qgis.Success)
+
+        return
 
 class TreeEyedProcessor:
 
@@ -164,25 +167,34 @@ class TreeEyedProcessor:
             parameters (dict): contains the dict with the processing parameters
         """
         
-        area_value = parameters["filter_area_area"]
+        # area_value = parameters["filter_area_area"]
         
         
+        # selected_layer = parameters["filter_area_layer"]
+        # layer_path = selected_layer.dataProvider().dataSourceUri()
+        
+        # gdf = gpd.read_file(layer_path)       
+        # gdf = gdf[gdf["area_m2"] <= area_value]
+        
+        # output_dir = parameters["output_path"]
+        # output_prefix = parameters["prefix"]
+        # output_filename = os.path.join(output_dir, output_prefix + "_vector.shp")
+        
+        
+        # gdf.to_file(output_filename, index=False)
+        
+        # layers = self._add_processed_layers([output_filename])
+        
+        # return
+
         selected_layer = parameters["filter_area_layer"]
         layer_path = selected_layer.dataProvider().dataSourceUri()
-        
-        gdf = gpd.read_file(layer_path)       
-        gdf = gdf[gdf["area_m2"] <= area_value]
-        
-        output_dir = parameters["output_path"]
-        output_prefix = parameters["prefix"]
-        output_filename = os.path.join(output_dir, output_prefix + "_vector.shp")
-        
-        
-        gdf.to_file(output_filename, index=False)
-        
-        layers = self._add_processed_layers([output_filename])
-        
-        return
+
+        parameters['input_raster_path'] = layer_path
+
+        qgstask = WorkerTask("Filter by area", parameters)
+        qgstask.task_finished.connect(self._process_task_finished)
+        QgsApplication.taskManager().addTask(qgstask)  
     
     def _process_raster2vector(self, parameters):
         """convert raster 2 vector
@@ -211,18 +223,18 @@ class TreeEyedProcessor:
 
         #return
 
-        img = cv.imread(layer_path, cv.IMREAD_GRAYSCALE)
+        #img = cv.imread(layer_path, cv.IMREAD_GRAYSCALE)
         #config_debug(img.dtype)
         #config_debug(img.shape)
-        config_debug("max",np.max(img))
+        #config_debug("max",np.max(img))
         
-        percentage = parameters["raster2vector_threshold"]/100.0
+        #percentage = parameters["raster2vector_threshold"]/100.0
         
-        max_value = np.max(img)
-        value = percentage*max_value
-        ret, img = cv.threshold(img, value, 255, 0)
+        #max_value = np.max(img)
+        #value = percentage*max_value
+        #ret, img = cv.threshold(img, value, 255, 0)
         
-        config_debug("max",np.max(img))
+        #config_debug("max",np.max(img))
         
         # #Visualize
         # window_name = "Inference"
@@ -234,58 +246,69 @@ class TreeEyedProcessor:
         # cv.imshow(window_name, img)
         # cv.waitKey(1)
         # return
+
+        parameters["binary_raster_path"] = layer_path
         
         
 
         # extent = self.iface.mapCanvas().extent()
-        epsg = self.iface.mapCanvas().mapSettings().destinationCrs().authid()
+        #epsg = self.iface.mapCanvas().mapSettings().destinationCrs().authid()
 
         # img = self._capture_canvas(parameters["layer"], visible=True)
-        model_dir = self._get_models_dir()
+        #model_dir = self._get_models_dir()
 
 
-        from .process.tree.tree_predictor_task import TreePredictorTask
-        tree_predictor_task = TreePredictorTask("Tree predictor task", model_dir, parameters, img, extent, epsg, temp_already_saved = False)
+        parameters['task'] = "raster2vector"
 
-        tree_predictor_task.output_dir = parameters["output_path"]
-        tree_predictor_task.output_prefix = parameters["prefix"]
-        tree_predictor_task.output_filename = os.path.join(tree_predictor_task.output_dir, tree_predictor_task.output_prefix + "_vector.shp")
+        qgstask = WorkerTask("Raster to vector task", parameters)
+        qgstask.task_finished.connect(self._process_task_finished)
+        QgsApplication.taskManager().addTask(qgstask)  
+
+
+        # from .process.tree.tree_predictor_task import TreePredictorTask
+        # tree_predictor_task = TreePredictorTask("Tree predictor task", model_dir, parameters, img, extent, epsg, temp_already_saved = False)
+
+        # tree_predictor_task.output_dir = parameters["output_path"]
+        # tree_predictor_task.output_prefix = parameters["prefix"]
+        # tree_predictor_task.output_filename = os.path.join(tree_predictor_task.output_dir, tree_predictor_task.output_prefix + "_vector.shp")
                
-        tree_predictor_task.output_files = []
-        #tree_predictor_task.output_files.append(tree_predictor_task.output_filename)
+        # tree_predictor_task.output_files = []
+        # #tree_predictor_task.output_files.append(tree_predictor_task.output_filename)
         
         
 
-        tree_predictor_task.save_shapefile_polygon_binary_raster(img
-                                                       , extent
-                                                       , img.shape[1]
-                                                       , img.shape[0]
-                                                    , epsg
-                                                       )
+        # tree_predictor_task.save_shapefile_polygon_binary_raster(img
+        #                                                , extent
+        #                                                , img.shape[1]
+        #                                                , img.shape[0]
+        #                                             , epsg
+        #                                                )
         
-        layers = self._add_processed_layers(tree_predictor_task.output_files)
+        # layers = self._add_processed_layers(tree_predictor_task.output_files)
 
 
-        # # Calculate zonal statistics
-        # # Create zonal statistics object
-        # zonal_stats = QgsZonalStatistics(layers[0], selected_layer
-        #                                 , attributePrefix="height"
-        #                                 , rasterBand=1, stats=QgsZonalStatistics.Statistics(QgsZonalStatistics.Max)
-        #                                 )
+        # # # Calculate zonal statistics
+        # # # Create zonal statistics object
+        # # zonal_stats = QgsZonalStatistics(layers[0], selected_layer
+        # #                                 , attributePrefix="height"
+        # #                                 , rasterBand=1, stats=QgsZonalStatistics.Statistics(QgsZonalStatistics.Max)
+        # #                                 )
 
-        # # Configure statistics
-        # #zonal_stats.setStatistics(QgsZonalStatistics.Mean)
+        # # # Configure statistics
+        # # #zonal_stats.setStatistics(QgsZonalStatistics.Mean)
 
-        # # Calculate zonal statistics
-        # zonal_stats.calculateStatistics(None)
-        # #zonal_stats.calculateStatistics(QgsZonalStatistics.SecondPass)
+        # # # Calculate zonal statistics
+        # # zonal_stats.calculateStatistics(None)
+        # # #zonal_stats.calculateStatistics(QgsZonalStatistics.SecondPass)
 
-        # # for field in layer.fields():
-        # # if field.name() == 'old_fieldname':
+        # # # for field in layer.fields():
+        # # # if field.name() == 'old_fieldname':
 
-        # #     with edit(layer):
-        # #         idx = layer.fields().indexFromName(field.name())
-        # #         layer.renameAttribute(idx, 'new_fieldname')
+        # # #     with edit(layer):
+        # # #         idx = layer.fields().indexFromName(field.name())
+        # # #         layer.renameAttribute(idx, 'new_fieldname')
+
+
 
     def _process_validate(self, parameters):
         """calculates validation metrics betwee 2 COCO datasets in .json format
@@ -641,7 +664,7 @@ class TreeEyedProcessor:
 
         if extent_type == "Current View":
             # if capture canvas 
-            img = self._capture_canvas(parameters["layer"], white_background = False)
+            img = self._capture_canvas(parameters["layer"], white_background = True)
             #img = self._capture_canvas(parameters["layer"], visible=True) # to save
 
             from .process.tree.interface.cachemanager import CacheManager
@@ -658,9 +681,12 @@ class TreeEyedProcessor:
             extent = self.iface.mapCanvas().extent()
             epsg = self.iface.mapCanvas().mapSettings().destinationCrs().authid()
 
-            from .process.tree.utils.utils_custom import np2tif_extent
+            #from .process.tree.utils.utils_custom import np2tif_extent
 
-            np2tif_extent(img, extent, epsg, temp_raster)
+            #np2tif_extent(img, extent, epsg, temp_raster)
+
+            from .process.tree.utils.utils_custom import np2tif_extent_gdal
+            np2tif_extent_gdal(img, extent, epsg, temp_raster)
 
             parameters['temp_raster'] = temp_raster
 
@@ -679,7 +705,7 @@ class TreeEyedProcessor:
             layer_path = layer.dataProvider().dataSourceUri()
             input_raster_path = layer_path
             
-            img = cv.imread(layer_path)
+            #img = cv.imread(layer_path)
 
             #Correct extent
             # Create a QgsCoordinateTransform object
@@ -778,11 +804,12 @@ class TreeEyedProcessor:
             
         else:        
             # img_bgr = self.predictor.predict(parameters, img, extent, espg)
-            img_bgr = self.predictor.predict_with_parameters(parameters, img, extent, epsg, temp_already_saved = temp_already_saved)
+            #img_bgr = self.predictor.predict_with_parameters(parameters, img, extent, epsg, temp_already_saved = temp_already_saved)
 
             #save capture
             #img2 = self._capture_canvas(parameters["layer"], visible=True)
             #self.predictor.save_capture(img, extent, espg)
+            print("ELSE")
 
         # **********************************************
 

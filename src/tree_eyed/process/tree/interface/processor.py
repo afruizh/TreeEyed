@@ -2,6 +2,8 @@
 
 from ..custom_processor import export_coco_dataset
 from ..custom_processor import inference
+from ..custom_processor import raster2vector
+from ..custom_processor import filter_area
 
 
 class Processor():
@@ -27,99 +29,29 @@ class Processor():
 
         elif task == "inference":
 
-            inference_results = inference(self.params, progress_callback = self.progress_callback, interruption_check = self.interruption_check)
+            task_results = inference(self.params, progress_callback = self.progress_callback, interruption_check = self.interruption_check)
             #results.update(inference_results)
-            results.update({"status": "completed", "log": "Task completed succesfully."})
+            if task_results is not None and "status" in task_results and "log" in task_results:
+                results.update({"status": task_results["status"], "log": task_results["log"]})
+            else:
+                results.update({"status": "completed", "log": "Task completed succesfully."})
 
-        # if task == "detection":
+        elif task == "raster2vector":
 
-        #     input_file = self.params.get("input_file")
-        #     output_folder = self.params.get("output_folder")
+            task_results = raster2vector(self.params, progress_callback = self.progress_callback, interruption_check = self.interruption_check)
+            if task_results is not None and "status" in task_results and "log" in task_results:
+                results.update({"status": task_results["status"], "log": task_results["log"]})
+            else:
+                results.update({"status": "completed", "log": "Task completed succesfully."})
 
-        #     self.forages_rois_detector = ForagesROIsDetector()
-        #     self.forages_rois_detector.inference(input_file, output_folder)
+        elif task == 'filter_area':
 
+            task_results = filter_area(self.params, progress_callback = self.progress_callback, interruption_check = self.interruption_check)
+            if task_results is not None and "status" in task_results and "log" in task_results:
+                results.update({"status": task_results["status"], "log": task_results["log"]})
+            else:
+                results.update({"status": "completed", "log": "Task completed succesfully."})
 
-
-        #     results.update({"status": "completed", "message": "Task completed succesfully."})
-
-        # elif task == "tiling_detection":
-
-        #     input_file = self.params.get("input_file")
-        #     output_folder = self.params.get("output_folder")
-
-        #     self.forages_rois_detector = ForagesROIsDetector()
-        #     self.forages_rois_detector.tile_inference(input_file, output_folder)
-
-        #     results.update({"status": "completed", "message": "Task completed succesfully."})
-
-        # elif task == "plot_numbering":
-
-        #     input_file = self.params.get("input_file")
-        #     output_folder = self.params.get("output_folder")
-        #     align = self.params.get("align", False)
-        #     serpentine = self.params.get("serpentine", False)
-
-        #     self.forages_rois_detector = ForagesROIsDetector()
-        #     self.forages_rois_detector.plot_numbering(input_file, output_folder
-        #                                               , align_to_grid=align
-        #                                               , serpentine=serpentine)
-
-        #     results.update({"status": "completed", "message": "Task completed succesfully."})
-
-        # elif task == "postprocessing":
-
-        #     input_file = self.params.get("input_file")
-        #     output_folder = self.params.get("output_folder")
-        #     #if key exists in params, use it, otherwise set default value
-        #     align = self.params.get("align", False)
-        #     serpentine = self.params.get("serpentine", False)
-
-        #     self.forages_rois_detector = ForagesROIsDetector()
-        #     self.forages_rois_detector.plot_numbering(input_file, output_folder
-        #                                               , only_postprocess=True
-        #                                               , align_to_grid=align
-        #                                               , serpentine=serpentine)
-
-        #     results.update({"status": "completed", "message": "Task completed succesfully."})
-
-        # elif task == "tiling_detection_only":
-
-        #     input_file = self.params.get("input_file")
-        #     output_folder = self.params.get("output_folder")
-
-        #     self.forages_rois_detector = ForagesROIsDetector()
-        #     self.forages_rois_detector.tile_inference(input_file, output_folder, only=True)
-
-        #     results.update({"status": "completed", "message": "Task completed succesfully."})
-
-
-            
-
-        # if task == "batch_segmentation":
-
-        #     # Perform batch segmentation
-        #     input_folder = self.params.get("input_folder")
-        #     output_folder = self.params.get("output_folder")
-
-        #     # Initialize the BackgroundRemover and perform batch processing
-        #     self.background_remover = RootSegmentor()
-        #     self.background_remover.batch_processing(input_folder
-        #                                             , output_folder
-        #                                             , progress_callback = self.progress_callback
-        #                                             , interruption_check = self.interruption_check)
-        
-        # # elif task == "single_segmentation":
-        # #     # Perform batch segmentation
-        # #     input_file = self.params.get("input_file")
-        # #     output_folder = self.params.get("output_folder")
-
-        # #     # Initialize the BackgroundRemover and perform batch processing
-        # #     self.background_remover = BackgroundRemover()
-        # #     self.background_remover.inference_file_save(input_file
-        # #                                             , output_folder
-        # #                                             , progress_callback = self.progress_callback
-        # #                                             , interruption_check = self.interruption_check)            
 
 
         else:

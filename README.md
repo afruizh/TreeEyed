@@ -100,6 +100,9 @@ Additionally, you need to have the models in a local folder an a configuration f
 python src/tree_eyed/tree_eyed_app.py --config config.json 
 ```
 
+```
+conda env create -f environment.yml
+```
 
 ## Docker image
 
@@ -135,9 +138,11 @@ python src/tree_eyed/tree_eyed_app.py --config /app/data/example_01.json
 - [X] Improved processing architecture (interface, processor, tree_eyed_processor)
 - [X] Added CLI using `tree_eyed_app.py`
 - [X] Added docker support using `Dockerfile`
-- [X] Improved export to COCO dataset
 - [X] Support for non tif images
 - [X] Additional postprocessing steps (non-max supression)
+- [X] Migration rasterio to gdal
+- [X] Migration geopandas to gdal
+- [ ] Improved export to COCO dataset
 
 
 
@@ -145,6 +150,8 @@ python src/tree_eyed/tree_eyed_app.py --config /app/data/example_01.json
 
 Planned improvements for TreeEyed include:
 
+- [ ] Human-in-the-loop correction, merging, nms.
+- [ ] Analsys export.
 - [ ] Integration of additional AI models for tree monitoring.
 - [ ] Support for state-of-the-art models such as DinoV3.
 - [ ] Tree zonification features for spatial analysis.

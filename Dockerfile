@@ -6,20 +6,29 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Set working directory
 WORKDIR /app
 
-# Install Python and pip
-RUN apt-get update && \
-	apt-get install -y python3 python3-pip && \
-	rm -rf /var/lib/apt/lists/*
 
-# Symlink python to python3 for compatibility
-RUN ln -s /usr/bin/python3 /usr/bin/python
+# Install system dependencies for PySide6 (Qt for Python) and Miniconda prerequisites
+RUN apt-get update && apt-get install -y wget bzip2 libglib2.0-0 && rm -rf /var/lib/apt/lists/*
 
-# Install system dependencies for PySide6 (Qt for Python)
-RUN apt-get update && apt-get install -y libglib2.0-0
+# # Install Miniconda
+# RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh && \
+# 	bash ~/miniconda.sh -b -p /opt/conda && \
+# 	rm ~/miniconda.sh
+# ENV PATH=/opt/conda/bin:$PATH
 
-# Copy requirements and install dependencies
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Miniforge
+RUN wget --quiet https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O ~/miniforge.sh && \
+    bash ~/miniforge.sh -b -p /opt/conda && \
+    rm ~/miniforge.sh
+ENV PATH=/opt/conda/bin:$PATH
+
+# Copy environment.yml and create conda environment
+COPY environment.yml ./
+RUN conda env create -f environment.yml
+
+# Set shell to use conda environment by default
+SHELL ["conda", "run", "-n", "tree_eyed", "/bin/bash", "-c"]
+
 
 # Copy TreeEyed source code
 COPY src/ ./src/
