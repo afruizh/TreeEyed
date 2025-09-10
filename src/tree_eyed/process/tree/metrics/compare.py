@@ -1,14 +1,30 @@
 import matplotlib.pyplot as plt
-
-
 import numpy as np
-
-import torchmetrics
-from torchmetrics.detection import IntersectionOverUnion
-import torch
 import os
 import cv2 as cv
-from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score, balanced_accuracy_score
+
+
+def dice_score(y_true, y_pred):
+    intersection = np.sum(y_true * y_pred)
+    return 2. * intersection / (np.sum(y_true) + np.sum(y_pred) + 1e-8)
+
+def precision_score(y_true, y_pred):
+    tp = np.sum((y_true == 1) & (y_pred == 1))
+    fp = np.sum((y_true == 0) & (y_pred == 1))
+    return tp / (tp + fp + 1e-8)
+
+def recall_score(y_true, y_pred):
+    tp = np.sum((y_true == 1) & (y_pred == 1))
+    fn = np.sum((y_true == 1) & (y_pred == 0))
+    return tp / (tp + fn + 1e-8)
+
+def f1_score(y_true, y_pred):
+    p = precision_score(y_true, y_pred)
+    r = recall_score(y_true, y_pred)
+    return 2 * p * r / (p + r + 1e-8)
+
+def accuracy_score(y_true, y_pred):
+    return np.mean(y_true == y_pred)
 
 
 class ResultsDataset():
@@ -31,10 +47,11 @@ class ResultsDataset():
 
         #List of metrics for semantic segmentation
         self.metrics_ss = []
-        self.metrics_ss.append({'torchmetric':torchmetrics.Dice(num_classes = 2, ignore_index = 0), 'metric':{'type':f1_score,'values':[]}})
-        self.metrics_ss.append({'torchmetric':torchmetrics.Precision(task='multiclass', num_classes = 2, ignore_index = 0), 'metric':{'type':precision_score,'values':[]}})
-        self.metrics_ss.append({'torchmetric':torchmetrics.Recall(task='multiclass', num_classes = 2, ignore_index = 0), 'metric':{'type':recall_score,'values':[]}})
-        self.metrics_ss.append({'torchmetric':torchmetrics.Accuracy(task='multiclass', num_classes = 2, ignore_index = 0), 'metric':{'type':balanced_accuracy_score,'values':[]}})
+        self.metrics_ss.append({'type':dice_score, 'values':[]})
+        self.metrics_ss.append({'type':precision_score, 'values':[]})
+        self.metrics_ss.append({'type':recall_score, 'values':[]})
+        self.metrics_ss.append({'type':f1_score, 'values':[]})
+        self.metrics_ss.append({'type':accuracy_score, 'values':[]})
 
 
     def get_imgs(self):
@@ -116,51 +133,31 @@ class ResultsDataset():
         return os.path.basename(self.path)
     
     def reset_metrics(self):
-
         for metric in self.metrics_ss:
-            metric['torchmetric'].reset()
-            metric['metric']['values'] = []
-
-        # for metric in self.metrics_is:
-        #     metric.reset()
-
-        # for metric in self.metrics_od:
-        #     metric.reset()
+            metric['values'] = []
 
 class COCOMetrics():
     def __init__(self):
         print('COCOMetrics')
-
-        #List of metrics for semantic segmentation
+        # List of metrics for semantic segmentation
         self.metrics_ss = []
-        # self.metrics_ss.append(torchmetrics.Dice(num_classes = 2, ignore_index = 0))
-        # self.metrics_ss.append(torchmetrics.Precision(task='multiclass', num_classes = 2, ignore_index = 0))
-        # self.metrics_ss.append(torchmetrics.Recall(task='multiclass', num_classes = 2, ignore_index = 0))
-        # self.metrics_ss.append(torchmetrics.Accuracy(task='multiclass', num_classes = 2, ignore_index = 0))
-        self.metrics_ss.append({'torchmetric':torchmetrics.Dice(num_classes = 2, ignore_index = 0), 'metric':{'type':f1_score,'values':[]}})
-        self.metrics_ss.append({'torchmetric':torchmetrics.Precision(task='multiclass', num_classes = 2, ignore_index = 0), 'metric':{'type':precision_score,'values':[]}})
-        self.metrics_ss.append({'torchmetric':torchmetrics.Recall(task='multiclass', num_classes = 2, ignore_index = 0), 'metric':{'type':recall_score,'values':[]}})
-        self.metrics_ss.append({'torchmetric':torchmetrics.Accuracy(task='multiclass', num_classes = 2, ignore_index = 0), 'metric':{'type':balanced_accuracy_score,'values':[]}})
-
-
-        #List of metrics for instance segmentation
+        self.metrics_ss.append({'type':dice_score, 'values':[]})
+        self.metrics_ss.append({'type':precision_score, 'values':[]})
+        self.metrics_ss.append({'type':recall_score, 'values':[]})
+        self.metrics_ss.append({'type':f1_score, 'values':[]})
+        self.metrics_ss.append({'type':accuracy_score, 'values':[]})
+        # List of metrics for instance segmentation
         self.metrics_is = []
-
-        #List of metrics for object detection
+        # List of metrics for object detection
         self.metrics_od = []
-        self.metrics_od.append(IntersectionOverUnion())
-
         # target values
         self.coco_target = None
         self.coco_target_path = None
-
         # predicted values
         self.coco_predicted = []
         self.coco_predicted_paths = []
-
         self.results_target = None
         self.results_preds = []
-        
         self.final_message = ""
 
     def load_target(self, filepath, result_type='coco'):
@@ -197,13 +194,10 @@ class COCOMetrics():
         self.load_preds(filepath_preds, result_type=result_type)
 
     def compute_metric_final(self, metric):
-
-        metric_res = metric['torchmetric'].compute()
-        metric_name =  metric['torchmetric'].__class__.__name__
+        # Compute the average of the metric values
+        metric_name = metric['type'].__name__
+        metric_res = np.average(metric['values'])
         print(f"{metric_name} is: {metric_res}")
-
-        metric_res = np.average(metric['metric']['values'])
-
         self.final_message +=  f"\n{metric_name} is: {metric_res}"
 
     def compute_metric_final_list(self, metric_list):
@@ -213,21 +207,13 @@ class COCOMetrics():
 
 
     def compute_metric_step(self, metric, real, pred, id=''):
-
-        metric_res = metric['torchmetric'](pred, real)
-        metric_name =  metric['torchmetric'].__class__.__name__
-        print("+++++++++++++++++++++++++++++")
+        # Compute metric using pure numpy function
+        metric_res = metric['type'](real.flatten(), pred.flatten())
+        metric_name = metric['type'].__name__
+        metric['values'].append(metric_res)
         print(f"{metric_name} is: {metric_res}")
 
-
-        if metric['metric']['type'] == balanced_accuracy_score:
-            metric['metric']['values'].append(metric['metric']['type'](real.flatten(), pred.flatten()))
-        else:
-            metric['metric']['values'].append(metric['metric']['type'](real, pred, average='micro'))
-        print(f"{str(metric['metric']['type'])} is: {metric['metric']['values']}")
-
     def compute_metric_step_list(self, metric_list, real , pred, id=''):
-        
         for metric in metric_list:
             self.compute_metric_step(metric, real, pred)
             
@@ -253,11 +239,9 @@ class COCOMetrics():
         self.compute_metric_final_list(self.metrics_od)
 
     def loadCOCO(self, filepath):
-
         # Create a COCO object
+        from pycocotools.coco import COCO
         self.coco_real = COCO(filepath)
-
-
         return
     
     def create_ss_mask(self, coco, img_id):
@@ -301,10 +285,9 @@ class COCOMetrics():
             labels.append(category_id)
 
         pred_bb = {
-            "boxes":torch.tensor(bbs)
-            , "labels": torch.tensor(labels)
-            }
-
+            "boxes": np.array(bbs),
+            "labels": np.array(labels)
+        }
         return [pred_bb]
     
     def get_pred_img_id(self, coco_pred, filename):
@@ -325,19 +308,13 @@ class COCOMetrics():
         return -1
     
     def reset_metrics(self):
-
         for metric in self.metrics_ss:
-            metric['torchmetric'].reset()
-            metric['metric']['values'] = []
-
+            metric['values'] = []
         for metric in self.metrics_is:
-            metric['torchmetric'].reset()
-            metric['metric']['values'] = []
-
+            metric['values'] = []
         for metric in self.metrics_od:
-            metric['torchmetric'].reset()
-            metric['metric']['values'] = []
-
+            metric['values'] = []
+            
     def compute(self):
 
         target_imgs = self.results_target.imgs
@@ -387,9 +364,7 @@ class COCOMetrics():
                         # self.compute_metric_step_list(self.metrics_ss
                         #                             , torch.from_numpy(mask_target)
                         #                             , torch.from_numpy(mask_pred))
-                        self.compute_metric_step_list(self.results_preds[index_pred].metrics_ss
-                                                    , torch.from_numpy(mask_target)
-                                                    , torch.from_numpy(mask_pred))
+                        self.compute_metric_step_list(self.results_preds[index_pred].metrics_ss, mask_target, mask_pred)
                 
         for results_pred in self.results_preds:
             print("****************************")

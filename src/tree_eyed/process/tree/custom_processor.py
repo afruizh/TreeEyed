@@ -1,3 +1,7 @@
+import os
+import numpy as np
+import json
+
 # GDAL/OGR-only polygon NMS
 def polygon_nms_gdal(wkt_list, iou_threshold=0.5):
     import shapely.wkt
@@ -19,13 +23,6 @@ def polygon_nms_gdal(wkt_list, iou_threshold=0.5):
                 suppressed.add(j)
     return [wkt_list[i] for i in keep], [i for i in keep]
 
-import os
-import numpy as np
-import json
-import threading
-
-# Thread-safe lock for CRS operations
-_crs_lock = threading.Lock()
 
 def tile_raster_gdal(input_raster_path, tiles_dir, tile_size, prefix="", progress_callback=None, interruption_check=None):
     """
@@ -169,9 +166,7 @@ def tile_raster_gdal(input_raster_path, tiles_dir, tile_size, prefix="", progres
     print(f"Created {len(tile_files)} tiles in {tiles_dir}")
     return tile_files
 
-# ===========================================
-# OGR-ONLY FUNCTIONS (Thread-safe, no GeoPandas/PyArrow)
-# ===========================================
+
 def merge_raster_gdal(tile_paths, output_path, nodata_value=-9999, data_type=None, progress_callback=None, interruption_check=None):
     """
     Merge raster tiles into a single raster using GDAL Python API.
@@ -384,12 +379,20 @@ def create_shapefile_ogr(output_filename, geometries, projection, geom_type="pol
     data_source = driver.CreateDataSource(output_filename)
     
     # Create spatial reference
-    srs = osr.SpatialReference()
-    srs.ImportFromWkt(projection)
-    
-    # Create layer with appropriate geometry type
+    srs = None
+    if projection and isinstance(projection, str) and projection.strip():
+        srs = osr.SpatialReference()
+        try:
+            srs.ImportFromWkt(projection)
+        except Exception:
+            # If corrupt, fallback to no CRS
+            srs = None
+    # If srs is None, create layer without CRS
     ogr_geom_type = ogr.wkbPolygon if geom_type in ["polygon", "bbox"] else ogr.wkbPoint
-    layer = data_source.CreateLayer("features", srs, ogr_geom_type)
+    if srs is not None:
+        layer = data_source.CreateLayer("features", srs, ogr_geom_type)
+    else:
+        layer = data_source.CreateLayer("features", None, ogr_geom_type)
     
     # Add fields
     layer.CreateField(ogr.FieldDefn("ID", ogr.OFTInteger))
@@ -402,10 +405,13 @@ def create_shapefile_ogr(output_filename, geometries, projection, geom_type="pol
 
     import numpy as np
 
-    # Prepare transformation to WGS84
-    tgt_srs = osr.SpatialReference()
-    tgt_srs.ImportFromEPSG(4326)
-    coord_transform = osr.CoordinateTransformation(srs, tgt_srs)
+    # Prepare transformation to WGS84 only if srs is not None
+    if srs is not None:
+        tgt_srs = osr.SpatialReference()
+        tgt_srs.ImportFromEPSG(4326)
+        coord_transform = osr.CoordinateTransformation(srs, tgt_srs)
+    else:
+        coord_transform = None
 
     for idx, geom_data in enumerate(geometries):
         feature = ogr.Feature(layer.GetLayerDefn())
@@ -428,7 +434,10 @@ def create_shapefile_ogr(output_filename, geometries, projection, geom_type="pol
             centroid = polygon.Centroid()
             lon_src = centroid.GetX()
             lat_src = centroid.GetY()
-            lon, lat, _ = coord_transform.TransformPoint(lon_src, lat_src)
+            if coord_transform is not None:
+                lon, lat, _ = coord_transform.TransformPoint(lon_src, lat_src)
+            else:
+                lon, lat = lon_src, lat_src
             circ = 4 * np.pi * area / perim**2 if perim > 0 else 0
 
         elif geom_type == "bbox":
@@ -448,14 +457,20 @@ def create_shapefile_ogr(output_filename, geometries, projection, geom_type="pol
             centroid = bbox.Centroid()
             lon_src = centroid.GetX()
             lat_src = centroid.GetY()
-            lon, lat, _ = coord_transform.TransformPoint(lon_src, lat_src)
+            if coord_transform is not None:
+                lon, lat, _ = coord_transform.TransformPoint(lon_src, lat_src)
+            else:
+                lon, lat = lon_src, lat_src
             circ = 4 * np.pi * area / perim**2 if perim > 0 else 0
 
         elif geom_type == "centroid":
             point = ogr.Geometry(ogr.wkbPoint)
             point.AddPoint(geom_data[0], geom_data[1])
             feature.SetGeometry(point)
-            lon, lat, _ = coord_transform.TransformPoint(geom_data[0], geom_data[1])
+            if coord_transform is not None:
+                lon, lat, _ = coord_transform.TransformPoint(geom_data[0], geom_data[1])
+            else:
+                lon, lat = geom_data[0], geom_data[1]
             area = 0.0
             circ = 0.0
 
@@ -524,99 +539,6 @@ def convert_shapefile_to_geomtype(input_shp, output_shp, geom_type="centroid"):
     ds_out = None
     ds_in = None
 
-# def save_shapefile_polygon_binary_raster_ogr(parameters):
-#     """
-#     OGR-only version that completely avoids GeoPandas and PyArrow
-#     """
-#     import cv2 as cv
-#     from osgeo import gdal, osr
-    
-#     results = {}
-#     results["output_files"] = []
-    
-#     binary_raster_path = parameters["binary_raster_path"]
-    
-#     # Read raster using GDAL
-#     ds = gdal.Open(binary_raster_path)
-#     gt = ds.GetGeoTransform()
-#     proj = ds.GetProjection()
-#     width = ds.RasterXSize
-#     height = ds.RasterYSize
-#     arr = ds.GetRasterBand(1).ReadAsArray()
-#     ds = None
-    
-#     thresh = arr
-    
-#     # Apply threshold if needed
-#     if "raster2vector_threshold" in parameters:
-#         percentage = parameters["raster2vector_threshold"] / 100.0
-#         max_value = np.max(thresh)
-#         min_value = np.min(thresh)
-#         range0 = max_value - min_value
-#         interval = range0 * percentage
-#         threshold = min_value + interval
-#         thresh = (thresh >= threshold) * 1.0
-        
-#     if thresh.dtype == np.float32 or thresh.dtype == np.float64:
-#         thresh = (thresh * 255).astype(np.uint8)
-        
-#     if len(thresh.shape) == 3 and thresh.shape[2] == 3:
-#         thresh = cv.cvtColor(thresh, cv.COLOR_RGB2GRAY)
-        
-#     # Find contours
-#     contours, hierarchy = cv.findContours(thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-    
-#     # Process contours and convert to geo coordinates
-#     polygons = []
-#     bboxes = []
-#     centroids = []
-    
-#     for index, contour in enumerate(contours):
-#         new_contour = np.squeeze(contour)
-#         if new_contour.ndim < 2:
-#             continue
-            
-#         # Convert pixel coordinates to geographic coordinates
-#         coord_polygon = []
-#         for point in new_contour:
-#             x = point[0]
-#             y = point[1]
-#             geo_x = gt[0] + x * gt[1] + y * gt[2]
-#             geo_y = gt[3] + x * gt[4] + y * gt[5]
-#             coord_polygon.append((geo_x, geo_y))
-            
-#         if len(coord_polygon) > 2:
-#             polygons.append(coord_polygon)
-            
-#             # Calculate bounding box
-#             xs = [coord[0] for coord in coord_polygon]
-#             ys = [coord[1] for coord in coord_polygon]
-#             minx, maxx = min(xs), max(xs)
-#             miny, maxy = min(ys), max(ys)
-#             bboxes.append((minx, miny, maxx, maxy))
-            
-#             # Calculate centroid
-#             centroid_x = sum(xs) / len(xs)
-#             centroid_y = sum(ys) / len(ys)
-#             centroids.append((centroid_x, centroid_y))
-    
-#     # Create output shapefiles
-#     if "polygons" in parameters["vector_outputs"]:
-#         output_filename = os.path.join(parameters["output_path"], parameters["prefix"] + "_vector.shp")
-#         create_shapefile_ogr(output_filename, polygons, proj, "polygon")
-#         results["output_files"].append(output_filename)
-        
-#     if "bounding_boxes" in parameters["vector_outputs"]:
-#         output_filename = os.path.join(parameters["output_path"], parameters["prefix"] + "_vector_bb.shp")
-#         create_shapefile_ogr(output_filename, bboxes, proj, "bbox")
-#         results["output_files"].append(output_filename)
-        
-#     if "centroids" in parameters["vector_outputs"]:
-#         output_filename = os.path.join(parameters["output_path"], parameters["prefix"] + "_vector_centroids.shp")
-#         create_shapefile_ogr(output_filename, centroids, proj, "centroid")
-#         results["output_files"].append(output_filename)
-        
-#     return results
 
 def bb_2_shapefile_ogr(df, parameters):
     """
@@ -632,7 +554,22 @@ def bb_2_shapefile_ogr(df, parameters):
         proj = ds.GetProjection()
         width = ds.RasterXSize
         height = ds.RasterYSize
+        # Robust check for georeferencing
+        # Accept only if proj is a valid WKT string (not empty, not 'None', not just whitespace, not 'LOCAL_CS', not 'UNDEFINED')
+        invalid_proj = [None, '', 'None', 'LOCAL_CS', 'UNDEFINED']
         has_epsg = True
+        if not proj or str(proj).strip() in invalid_proj:
+            has_epsg = False
+        else:
+            from osgeo import osr
+            srs = osr.SpatialReference()
+            try:
+                srs.ImportFromWkt(proj)
+                # If local, no authority, or not projected/geographic, treat as non-georeferenced
+                if srs.IsLocal() or srs.GetAuthorityCode(None) is None or not (srs.IsProjected() or srs.IsGeographic()):
+                    has_epsg = False
+            except Exception:
+                has_epsg = False
         ds = None
     except Exception:
         from PIL import Image
@@ -651,20 +588,33 @@ def bb_2_shapefile_ogr(df, parameters):
         ymin = detection["ymin"]
         xmax = detection["xmax"]
         ymax = detection["ymax"]
-        
+
+        # Validate all coordinates are floats
+        def is_valid(val):
+            try:
+                float(val)
+                return True
+            except Exception:
+                return False
+
         if has_epsg and gt:
-            # Convert pixel coordinates to geo coordinates
             geo_xmin = gt[0] + xmin * gt[1] + ymin * gt[2]
             geo_ymin = gt[3] + xmin * gt[4] + ymin * gt[5]
             geo_xmax = gt[0] + xmax * gt[1] + ymax * gt[2]
             geo_ymax = gt[3] + xmax * gt[4] + ymax * gt[5]
-            bboxes.append((geo_xmin, geo_ymin, geo_xmax, geo_ymax))
+            bbox = (geo_xmin, geo_ymin, geo_xmax, geo_ymax)
         else:
-            bboxes.append((xmin, ymin - height, xmax, ymax - height))
-    
+            print("NO GEOTIFF/NO EPSG - using pixel coordinates with flipped Y axis")
+            bbox = (xmin,  - ymax, xmax,  - ymin)
+
+        if all(is_valid(v) for v in bbox):
+            bboxes.append(tuple(float(v) for v in bbox))
+        else:
+            print(f"Skipping invalid bbox: {bbox}")
+
     if bboxes:
         create_shapefile_ogr(temp_output, bboxes, proj or "", "bbox")
-    
+
     return temp_output
 
 
@@ -803,390 +753,6 @@ def zonal_stats(gdf, raster_path, stats=['mean', 'min', 'max']):
         results.append(stat)
     return results
 
-def save_shapefile_polygon_binary_raster(parameters):
-        
-        import cv2 as cv
-        import pandas as pd
-        import shapely
-        import geopandas as gpd
-        import rasterio as rio
-
-        results = {}
-        results["output_files"] = []
-
-        binary_raster_path = parameters["binary_raster_path"]
-        # Obtain extent, img_width, img_height, epsg from loading the binary raster with rio
-        with rio.open(binary_raster_path) as src:
-            extent = src.bounds
-            img_width = src.width
-            img_height = src.height
-            epsg = src.crs.to_string()
-            thresh = src.read(1)  # Read the first band
-
-        # Apply additional threshold if needed
-        if "raster2vector_threshold" in parameters:
-            percentage = parameters["raster2vector_threshold"]/100.0
-
-            max_value = np.max(thresh)
-            min_value = np.min(thresh)
-
-            range0 = max_value - min_value
-            interval = range0*percentage
-            #threshold = min_value + interval * parameters["hrch_threshold"]
-            threshold = min_value + interval
-            thresh = (thresh >= threshold)*1.0
-
-        #Check if thresh is CV_32FC1 and convert to CV_8UC1
-        if thresh.dtype == np.float32 or thresh.dtype == np.float64:
-            thresh = (thresh * 255).astype(np.uint8)
-        
-        #if 3 channels, convert to single channel
-        if len(thresh.shape)==3 and thresh.shape[2]==3:
-            thresh = cv.cvtColor(thresh, cv.COLOR_RGB2GRAY)
-
-        
-
-        df_tree_polygons_test = pd.DataFrame()
-        tree_bb = []
-
-        #(contours, hierarchy) = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-        # Improve shape extraction
-        (contours, hierarchy) = cv.findContours(thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-
-
-
-        # Test improved shape extraction
-        # processed_filepath = os.path.join(parameters["output_path"], parameters["prefix"] + "_raster.tif")
-        # crowns_mask, crowns_polygons= extract_individual_trees_opencv(processed_filepath, gaussian_sigma=2
-        #                                                       , range_divisor=50
-        #                                                       , min_crown_area=0
-        #                                                       , max_crown_area=5000
-        #                                                       )
-
-        count = 0
-        #contours
-        for index,contour in enumerate(list(contours)):
-            #print("contour ", index)
-            new_contour = np.squeeze(contour)
-            #print(new_contour)
-
-            #print("number of dimensions")
-            #print(new_contour.ndim)
-
-            if new_contour.ndim < 2: #has only one point
-                continue
-
-            coord_polygon =[]
-            for point in new_contour:
-
-                coord = (point[0], point[1])
-                new_coord = pos2coords(coord, extent, img_width, img_height)
-                coord_polygon.append(new_coord)
-
-            
-            if len(coord_polygon) > 2:#at least 3 points
-
-                polygon_object = shapely.geometry.Polygon(coord_polygon)
-                polygon_object = shapely.make_valid(polygon_object)
-
-                polygons = []
-                if isinstance(polygon_object, shapely.geometry.polygon.Polygon):
-                    polygons.append(polygon_object)
-                elif isinstance(polygon_object, shapely.geometry.collection.GeometryCollection):
-                    #polygons.append(polygon_object.geoms)
-                    print("HERE")
-                    print(polygon_object)
-                    for item in polygon_object.geoms:
-                        if isinstance(item, shapely.geometry.polygon.Polygon):
-                            polygons.append(item)
-                        elif isinstance(item, shapely.geometry.multipolygon.MultiPolygon): #include multipolygons
-                            polygons.append(item)
-                elif isinstance(polygon_object, shapely.geometry.multipolygon.MultiPolygon):#include multipolygons
-                    polygons.append(polygon_object)
-                else:
-                    print(type(polygon_object))
-
-                for polygon_geometry in polygons:
-
-                    #print("polygon_geometry", polygon_geometry)
-
-
-                    df_item_test = pd.DataFrame({'Class': 'tree'
-                                        , 'ID': count
-                                        , 'label': 'tree'
-                                        }
-                                        , index=[count])
-                    df_tree_polygons_test = pd.concat((df_tree_polygons_test, df_item_test))
-
-                    #tree_bb.append(polygon_object)
-                    tree_bb.append(polygon_geometry)
-
-                    count = count + 1
-
-        
-
-        # Create geodataframe
-        gdf_trees = gpd.GeoDataFrame(df_tree_polygons_test, geometry=tree_bb)
-        gdf_trees = safe_set_crs(gdf_trees, epsg=epsg.replace("EPSG:",""))
-        
-        #config_debug("len", len(gdf_trees))
-
-        # Dissolve so no items in others
-        gdf_trees = gdf_trees.dissolve()
-        gdf_trees = gdf_trees.explode()
-        # Solve problem additional columns
-        #gdf_trees = gdf_trees.drop(columns=['level_0','level_1'])
-        gdf_trees['ID'] = range(len(gdf_trees))
-
-        #gdf_trees.to_file("D:/local_mydata/tree/results/vector/result_polygons.shp")
-
-        #print(gdf_trees)
-        # Fix geometries
-        #gdf_trees = gdf_trees.make_valid()
-        #print(gdf_trees)
-        #gdf_trees['geometry'] = gdf_trees.geometry.apply(lambda x: x.make_valid())
-        #gdf_trees['geometry'] = gdf_trees.make_valid()
-
-        #test_df = gdf_trees.copy()
-        #print(test_df.make_valid().info())
-
-        # # Add additional
-
-        # lon = extent.xMinimum()
-        # lat = extent.yMinimum()
-
-        # # Guarantee correct lat lon crs
-        # #source_crs = layer.crs()
-        # source_crs = QgsCoordinateReferenceSystem(epsg)
-        # target_crs = QgsCoordinateReferenceSystem("EPSG:4326")
-
-        # transform = QgsCoordinateTransform(source_crs, target_crs, QgsProject.instance())
-
-        # geom = QgsGeometry(QgsPoint(extent.xMinimum(), extent.yMinimum()))
-        # geom.transform(transform)
-
-        # lon = geom.constGet().x()
-        # lat = geom.constGet().y()
-
-        # Assume extent is a tuple: (minx, miny, maxx, maxy)
-        minx, miny, maxx, maxy = extent
-
-        # Use pyproj for coordinate transformation
-        from pyproj import Transformer
-
-        # Convert EPSG string to int if needed
-        if isinstance(epsg, str) and epsg.startswith("EPSG:"):
-            epsg_code = int(epsg.split(":")[1])
-        else:
-            epsg_code = int(epsg)
-
-        # Transform lower-left corner to WGS84
-        lon, lat = safe_pyproj_transform(epsg_code, 4326, minx, miny)
-
-
-        new_crs = "+proj=cea +lat_0=" + str(lat)  + " +lon_0="+ str(lon) + " +units=m"
-        #print(new_crs)
-        #df = df.to_crs("+proj=cea +lat_0=35.68250088833567 +lon_0=139.7671 +units=m")
-        gdf_trees["area_m2"] = safe_to_crs(gdf_trees, new_crs).area
-        gdf_trees["perim_m"] = safe_to_crs(gdf_trees, new_crs).length
-        gdf_trees["a_diam_m"] = np.sqrt(gdf_trees["area_m2"]*4.0/np.pi)        # Add lat lon of centroid
-        gdf_trees["lon"] = gdf_trees.geometry.centroid.x
-        gdf_trees["lat"] = gdf_trees.geometry.centroid.y
-
-        # Calculate circularity
-        gdf_trees["circularity"] = 4 * np.pi * gdf_trees["area_m2"] / gdf_trees["perim_m"]**2
-
-        # Add estimated height
-        processed_filepath = os.path.join(parameters["output_path"], parameters["prefix"] + "_raster.tif")
-        if (os.path.exists(processed_filepath)): 
-            stats = zonal_stats(gdf_trees, processed_filepath, stats=['mean', 'min', 'max'])
-            gdf_trees['h_mean'] = [s.get('mean', None) for s in stats]
-            gdf_trees['h_min'] = [s.get('min', None) for s in stats]
-            gdf_trees['h_max'] = [s.get('max', None) for s in stats]
-
-        
-        #save
-        if "polygons" in parameters["vector_outputs"]:
-            output_filename = os.path.join(parameters["output_path"], parameters["prefix"] + "_vector.shp")
-            gdf_trees.to_file(output_filename, index=False)
-            
-            results["output_files"].append(output_filename)
-
-        if "bounding_boxes" in parameters["vector_outputs"]:
-            output_filename = os.path.join(parameters["output_path"], parameters["prefix"] + "_vector_bb.shp")
-
-            gdf_trees_bb = gdf_trees.copy()
-            #gdf_trees_bb['geometry'] = gdf_trees_bb['geometry'].bounds
-            bb = []
-            for geom in gdf_trees_bb['geometry']:                
-                bb.append(shapely.geometry.box(*geom.bounds))
-                #print(geom.bounds)
-            #print(len(bb))
-            gdf_trees_bb['geometry'] = bb
-            #gdf_trees_bb = gpd.GeoDataFrame(df_tree_polygons_test, geometry=bb)
-            #print(gdf_trees_bb.info())
-
-            gdf_trees_bb.to_file(output_filename, index=False)
-
-            results["output_files"].append(output_filename)
-
-        if "centroids" in parameters["vector_outputs"]:
-
-            output_filename = os.path.join(parameters["output_path"], parameters["prefix"] + "_vector_centroids.shp")
-
-            gdf_trees_c = gdf_trees.copy()
-            gdf_trees_c['geometry'] = gdf_trees_c['geometry'].centroid
-
-            gdf_trees_c.to_file(output_filename, index=False)
-
-            results["output_files"].append(output_filename)
-
-        return results
-
-def bb_2_geodataframe(df, parameters):
-
-        import cv2 as cv
-        import pandas as pd
-        import shapely
-        import geopandas as gpd
-        import rasterio as rio
-
-        results = {}
-        results["output_files"] = []
-
-        has_epsg = False
-
-        input_raster_path = parameters["input_raster_path"]
-        # Obtain extent, img_width, img_height, epsg from loading the binary raster with rio
-        # Check if input is a GeoTIFF, otherwise use default values
-        try:
-            with rio.open(input_raster_path) as src:
-                extent = src.bounds
-                img_width = src.width
-                img_height = src.height
-                epsg = src.crs.to_string()
-                has_epsg = True
-        except Exception:
-            # Not a GeoTIFF or cannot read spatial info
-            import PIL.Image
-            img = PIL.Image.open(input_raster_path)
-            img_width, img_height = img.size
-            # Default extent: (0, 0, width, height)
-            extent = (0, 0, img_width, img_height)
-            epsg = None
-            has_epsg = False
-
-        print(type(df))
-        if type(df) == "NoneType":
-            print("No results")
-            return
-
-        df_tree_polygons_test = pd.DataFrame()
-        tree_bb = []
-        count = 0
-
-        for index, detection in df.iterrows():
-
-            xmin = detection["xmin"]
-            ymin = detection["ymin"]
-            xmax = detection["xmax"]
-            ymax = detection["ymax"]
-
-            new_contour = []
-            new_contour.append((xmin,ymin))
-            new_contour.append((xmax,ymin))
-            new_contour.append((xmax,ymax))
-            new_contour.append((xmin,ymax))
-
-            coord_polygon =[]
-            for point in new_contour:
-
-                coord = (point[0], point[1])
-                new_coord = pos2coords(coord, extent, img_width, img_height)
-
-                if not has_epsg:
-                    new_coord = (new_coord[0],new_coord[1]-img_height)
-
-                coord_polygon.append(new_coord)
-
-            #print("len", len(coord_polygon))
-
-            if len(coord_polygon) > 2:#at least 3 points
-
-                polygon_object = shapely.geometry.Polygon(coord_polygon)
-
-                df_item_test = pd.DataFrame({'Class': 'tree'
-                                    , 'ID': count
-                                    , 'label': 'tree'
-                                    }
-                                    , index=[count])
-                df_tree_polygons_test = pd.concat((df_tree_polygons_test, df_item_test))
-
-                #tree_bb.append(polygon_object)
-                tree_bb.append(polygon_object)
-
-                count = count + 1
-
-        # Create geodataframe
-        gdf_trees = gpd.GeoDataFrame(df_tree_polygons_test, geometry=tree_bb)
-        
-
-
-        # Dissolve so no items in others
-        #gdf_trees = gdf_trees.dissolve()
-        #gdf_trees = gdf_trees.explode()
-
-        
-        # Add additional
-
-        # lon = extent.xMinimum()
-        # lat = extent.yMinimum()
-
-        # # Guarantee correct lat lon crs
-        # #source_crs = layer.crs()
-        # source_crs = QgsCoordinateReferenceSystem(epsg)
-        # target_crs = QgsCoordinateReferenceSystem("EPSG:4326")
-
-        # transform = QgsCoordinateTransform(source_crs, target_crs, QgsProject.instance())
-
-        # geom = QgsGeometry(QgsPoint(extent.xMinimum(), extent.yMinimum()))
-        # geom.transform(transform)
-
-        # lon = geom.constGet().x()
-        # lat = geom.constGet().y()
-
-        if has_epsg:
-
-            gdf_trees = safe_set_crs(gdf_trees, epsg=epsg.replace("EPSG:",""))
-
-            print(gdf_trees)
-
-            
-
-            # Assume extent is a tuple: (minx, miny, maxx, maxy)
-            minx, miny, maxx, maxy = extent
-
-            # Use pyproj for coordinate transformation
-            from pyproj import Transformer
-
-            # Convert EPSG string to int if needed
-            if isinstance(epsg, str) and epsg.startswith("EPSG:"):
-                epsg_code = int(epsg.split(":")[1])
-            else:
-                epsg_code = int(epsg)
-
-            # Transform lower-left corner to WGS84
-            lon, lat = safe_pyproj_transform(epsg_code, 4326, minx, miny)
-
-            new_crs = "+proj=cea +lat_0=" + str(lat)  + " +lon_0="+ str(lon) + " +units=m"
-            #print(new_crs)
-            #df = df.to_crs("+proj=cea +lat_0=35.68250088833567 +lon_0=139.7671 +units=m")
-            gdf_trees["area_m2"] = safe_to_crs(gdf_trees, new_crs).area
-            gdf_trees["a_diam_m"] = np.sqrt(gdf_trees["area_m2"]*4.0/np.pi)
-
-        return gdf_trees
-
-        
 
 
 
@@ -1406,6 +972,14 @@ def inference_img(parameters, progress_callback = None, interruption_check = Non
 
     print(f"Tiled image into {tile_count} tiles at {tiles_dir}")
 
+    # Check if interruption
+    if interruption_check is not None:
+        if interruption_check():
+            #add 'status':'interrupted' to parameters
+            parameters["status"] = "interrupted"
+            parameters["log"] = "Process interrupted by user."
+            return parameters
+
 
     # Process
     pattern = os.path.join(tiles_dir, "*.tif")
@@ -1422,13 +996,86 @@ def inference_img(parameters, progress_callback = None, interruption_check = Non
 
     # Batch process, TODO: parallelize
     results = model_inference(parameters, progress_callback, interruption_check)
+
+    # Check if interruption
+    if interruption_check is not None:
+        if interruption_check():
+            #add 'status':'interrupted' to parameters
+            parameters["status"] = "interrupted"
+            parameters["log"] = "Process interrupted by user."
+            return parameters
     
 
     # Merge
 
     if "tiles_processed" in results and len(results["tiles_processed"]) > 0:
 
-        # Check if merge tif raster or vector shp
+        # # Check if merge tif raster or vector shp
+        # first = results["tiles_processed"][0]
+        # if first.endswith(".shp"):
+
+        #     processed_filepath = os.path.join(parameters["output_path"], parameters["prefix"] + "_bb.shp")
+
+        #     print(processed_filepath)
+
+        #     # Merge shp filepaths in results["tiles_processed"]
+        #     import geopandas as gpd
+        #     import pandas as pd
+        #     import re
+
+        #     gdfs = []
+        #     for shp_path in results["tiles_processed"]:
+        #         gdf = gpd.read_file(shp_path)
+        #         gdfs.append(gdf)
+
+
+        #     n_tiles_x = int(np.ceil(w / tile_size))
+        #     n_tiles_y = int(np.ceil(h / tile_size))
+
+        #     # Helper to get tile index from filename
+        #     def get_tile_index(shp_path):
+        #         # Assumes filename like '00001.shp' or 'prefix00001.shp'
+        #         base = os.path.basename(shp_path)
+        #         match = re.search(r"(\d+)\.shp$", base)
+        #         return int(match.group(1)) if match else -1
+
+        #     # Sort shapefiles by tile index
+        #     tile_shps = sorted(results["tiles_processed"], key=get_tile_index)
+
+
+
+        #     # Concatenate all GeoDataFrames
+        #     #merged_gdf = gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
+        #     merged_gdfs = []
+        #     for idx, shp_path in enumerate(tile_shps):
+        #         gdf = gpd.read_file(shp_path)
+        #         if gdf.empty:
+        #             continue
+        #         tile_idx = get_tile_index(shp_path)
+        #         row = tile_idx // n_tiles_x
+        #         col = tile_idx % n_tiles_x
+        #         x_offset = col * tile_size
+        #         y_offset = row * tile_size
+
+        #         # Shift geometries by tile offset
+        #         gdf = gdf.copy()
+        #         gdf["geometry"] = gdf["geometry"].translate(xoff=x_offset, yoff=-y_offset)
+        #         merged_gdfs.append(gdf)
+            
+        #     merged_gdf = gpd.GeoDataFrame(pd.concat(merged_gdfs, ignore_index=True))
+
+
+        #     # Dissolve to merge geometries
+        #     #merged_gdf = merged_gdf.dissolve()
+        #     #merged_gdf = merged_gdf.explode()
+        #     # Save merged GeoDataFrame to a new shapefile
+        #     merged_gdf = merged_gdf.reset_index(drop=True)
+        #     merged_gdf.to_file(processed_filepath, driver='ESRI Shapefile')
+
+        #     parameters["output_files"] = []
+        #     parameters["output_files"].append(processed_filepath)
+
+        # # Check if merge tif raster or vector shp
         first = results["tiles_processed"][0]
         if first.endswith(".shp"):
 
@@ -1493,8 +1140,6 @@ def inference_img(parameters, progress_callback = None, interruption_check = Non
             parameters["output_files"] = []
             parameters["output_files"].append(processed_filepath)
 
-            
-
         elif first.endswith(".tif"):
 
             import re
@@ -1545,12 +1190,16 @@ def inference_img(parameters, progress_callback = None, interruption_check = Non
 
             cv.imwrite(processed_filepath, merged)
 
-
+    # Check if interruption
+    if interruption_check is not None:
+        if interruption_check():
+            #add 'status':'interrupted' to parameters
+            parameters["status"] = "interrupted"
+            parameters["log"] = "Process interrupted by user."
+            return parameters
 
 
     return parameters
-
-
 
 def polygon_nms(gdf, iou_threshold=0.5, score_col=None):
     # If thre is a confidence score, sort by it (descending)
@@ -1622,42 +1271,6 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
     print(f"Using cache folder: {outputdir}")
 
 
-    # CACHE_FOLDER = "_cache_tree_eyed"
-
-    # cache_dir = os.path.join(output_path, CACHE_FOLDER)
-    # os.makedirs(cache_dir, exist_ok=True)
-
-    # import datetime
-    # timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    # #dir_name = prefix + "_temp_dir_" + timestamp
-    # dir_name = prefix + "_" + timestamp
-    # outputdir = os.path.join(output_path, CACHE_FOLDER, dir_name)
-
-    # # Check all metadata.json if it exists in folders in cache_dir
-    # # if input_raster_path in metadata.json then break and assign parent folder to dir_name
-    # for root, dirs, files in os.walk(cache_dir):
-    #     if "metadata.json" in files:
-    #         metadata_filepath = os.path.join(root, "metadata.json")
-    #         # if file exists, read it and check if input_raster_path matches
-    #         if os.path.exists(metadata_filepath):
-    #             with open(metadata_filepath, "r") as f:
-    #                 metadata = json.load(f)
-    #                 # Compare file paths using os.path.abspath and os.path.normcase for cross-platform compatibility
-    #                 meta_path = os.path.normcase(metadata.get("input_raster_path"))
-    #                 raster_path = os.path.normcase(os.path.abspath(input_raster_path))
-
-    #                 print(meta_path)
-    #                 print(raster_path)
-
-    #                 if meta_path == raster_path and not metadata.get("is_temporal",False):
-
-    #                     if (metadata.get("tile_size") == tile_size):
-    #                         dir_name = os.path.basename(root)
-    #                         outputdir = root
-    #                         print(f"Found cached files for {input_raster_path} in {metadata_filepath}")
-    #                         break
-
-
     tiles_dir = os.path.join(outputdir, "tiles")
     model = parameters["model"]
     model_processsed_folder = model.replace(" ", "_").lower()
@@ -1693,68 +1306,7 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
     # TODO: Parallelize tiling and inference
     # Tile if necessary
     import importlib
-    if importlib.util.find_spec("qgis") is not None:
-
-        # import processing
-
-        # print("Tiling using GDAL")
-
-        # task_parameters = {
-        #     'INPUT': [input_raster_path],
-        #     'TILE_SIZE_X': tile_size,
-        #     'TILE_SIZE_Y': tile_size,
-        #     'OVERLAP': 0,
-        #     'LEVELS': 1,
-        #     'SOURCE_CRS': None,
-        #     'RESAMPLING': 0,
-        #     'DELIMITER': ';',
-        #     # Ensure output is RGBA and padded with transparency
-        #     'OPTIONS': 'TILED=YES|COMPRESS=LZW|BIGTIFF=IF_SAFER|PHOTOMETRIC=RGB|ALPHA=YES',
-        #     'EXTRA': '-co ALPHA=YES',
-        #     'DATA_TYPE': 0,  # Byte
-        #     'ONLY_PYRAMIDS': False,
-        #     'DIR_FOR_ROW': False,
-        #     'OUTPUT': tiles_dir
-        # }
-        # processing.run("gdal:retile", task_parameters)
-
-        # from osgeo import gdal, gdal_array
-        # import numpy as np
-        # import glob
-        # #import os
-
-
-        # nodata_value = -9999
-        # tile_pattern = os.path.join(tiles_dir, "*.tif")
-        # tile_files = glob.glob(tile_pattern)
-        # for tile_path in tile_files:
-        #     ds = gdal.Open(tile_path, gdal.GA_Update)
-        #     if ds is None:
-        #         continue
-        #     width = ds.RasterXSize
-        #     height = ds.RasterYSize
-        #     bands = ds.RasterCount
-        #     dtype = ds.GetRasterBand(1).DataType
-        #     if width == tile_size and height == tile_size:
-        #         ds = None
-        #         continue  # already correct size
-        #     arr = np.zeros((bands, height, width), dtype=gdal_array.GDALTypeCodeToNumericTypeCode(dtype))
-        #     for b in range(bands):
-        #         arr[b] = ds.GetRasterBand(b+1).ReadAsArray()
-        #     padded = np.full((bands, tile_size, tile_size), nodata_value, dtype=arr.dtype)
-        #     padded[:, :height, :width] = arr
-        #     geotransform = ds.GetGeoTransform()
-        #     projection = ds.GetProjection()
-        #     ds = None
-        #     driver = gdal.GetDriverByName('GTiff')
-        #     out_ds = driver.Create(tile_path, tile_size, tile_size, bands, dtype)
-        #     out_ds.SetGeoTransform(geotransform)
-        #     out_ds.SetProjection(projection)
-        #     for b in range(bands):
-        #         out_ds.GetRasterBand(b+1).WriteArray(padded[b])
-        #         out_ds.GetRasterBand(b+1).SetNoDataValue(nodata_value)
-        #     out_ds.FlushCache()
-        #     out_ds = None
+    if importlib.util.find_spec("osgeo") is not None:
 
         tile_raster_gdal(input_raster_path
                          , tiles_dir
@@ -1790,24 +1342,8 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
         w = metadata["width"]
         h = metadata["height"]
         max_px = tile_size
-        #max_px = 256    
         overlap = 0
 
-        # rows = 1
-
-        # if (w > max_px or h > max_px):
-
-        #     max_val = max(w,h)
-        #     #print(max_val)        
-        #     #rows = np.ceil(max_val/final_max_px)
-        #     #rows = (max_val - np.ceil(overlap*max_val))/(max_px - np.ceil(overlap*max_val))
-        #     rows = np.ceil((max_val-overlap*max_px)/(max_px*(1-overlap)))
-
-        # print("rows", rows)
-        # print("overlap", overlap)
-
-        # # Create a vector grid for each tile
-        # converter.create_grid(rows, overlap, overlap)
 
         converter.create_grid_px(max_px, overlap)  # Use 1 row for single tile extraction
 
@@ -1840,6 +1376,13 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
 
     # Batch process, TODO: parallelize
     results = model_inference(parameters, progress_callback, interruption_check)
+
+    # Checck if interruption
+    if interruption_check is not None:
+        if interruption_check():
+            parameters["status"] = "interrupted"
+            parameters["log"] = "Process interrupted by user."
+            return parameters
 
     # Merge
     if "tiles_processed" in results and len(results["tiles_processed"]) > 0:
@@ -1949,7 +1492,7 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
             
                 
 
-            elif importlib.util.find_spec("qgis") is not None:
+            elif importlib.util.find_spec("osgeo") is not None:
 
                 import processing
                 from osgeo import gdal
@@ -2182,6 +1725,13 @@ def inference_georaster(parameters, progress_callback = None, interruption_check
         else:
             print("Unsupported file type for merging. Expected .tif or .shp files.")
 
+
+    # Checck if interruption
+    if interruption_check is not None:
+        if interruption_check():
+            parameters["status"] = "interrupted"
+            parameters["log"] = "Process interrupted by user."
+            return parameters
 
     # Post-process results
 
@@ -2581,416 +2131,6 @@ def postprocess_yolo_output(output, conf_thres=0.25, iou_thres=0.45, input_shape
     print("scores shape", scores.shape)
 
     return xyxy, scores
-
-# import rasterio as rio
-# def np2tif_2(data, filepath_tif, filepath_output, output_dtype=rio.uint8):
-    
-
-#     # Load original tif file and copy metadata
-#     orig_img = rio.open(filepath_tif)
-#     out_meta = orig_img.meta.copy()
-#     out_meta.update({'count':1},indexes=1)
-#     out_meta.update({'dtype': output_dtype})  # Ensure output dtype is set in metadata
-
-#     # Ensure data is 2D for single-band output
-#     data = np.squeeze(data)
-#     if data.ndim == 3 and data.shape[0] == 1:
-#         data = data[0]
-#     if data.ndim != 2:
-#         raise ValueError(f"Data for single-band GeoTIFF must be 2D, got shape {data.shape}")
-
-#     # Save file
-#     with rio.open(filepath_output, "w", **out_meta) as dst:
-#         print("save file")
-#         dst.write(data.astype(output_dtype), 1)
-
-# def model_inference(parameters, progress_callback = None, interruption_check = None):
-
-#     model = parameters["model"]
-#     model_dir = parameters["model_dir"]
-
-#     results = {}
-
-#     if model == 'HighResCanopyHeight':
-
-#         #from .dependencies.hrch.inference_full import HRCHInference
-
-#         model_path = os.path.join(model_dir, "HRCH_model", "HRCH_SSLhuge_satellite.onnx")
-
-#         count = 0
-#         hrch_inference = []
-
-#         ort_sess = []
-#         temp_parameters = parameters.copy() #copy parameters
-
-#         total_tiles = len(parameters['tiles'])
-
-#         tiles_processed = []
-
-#         for index, tile in enumerate(parameters['tiles']):
-
-
-#             prefix = os.path.basename(tile)
-#             prefix, ext = os.path.splitext(prefix)
-#             output_path = parameters['processed_dir']
-#             processed_filepath = os.path.join(output_path, prefix + "_raster.tif")
-
-#             if os.path.exists(processed_filepath):
-#                 # # Assign results
-#                 tiles_processed.append(processed_filepath)
-#                 continue
-
-#             temp_parameters.update({'input_raster_path': tile
-#                                     , 'prefix': prefix
-#                                     , 'output_path': output_path
-#                                     })
-
-#             if is_raster_empty(tile):
-#                 continue
-
-#             # if count == 0 and type(hrch_inference) != HRCHInference:                     
-#             #     hrch_inference = HRCHInference(temp_parameters)
-                
-#             # hrch_inference.update(temp_parameters)
-#             # hrch_inference.predict()
-
-#             # # Assign results
-#             # results["output_files"] = hrch_inference.output_files
-
-#             #*************************************************
-
-#             import onnxruntime as ort
-#             import cv2 as cv
-
-
-#             if count == 0 and type(ort_sess) != ort.InferenceSession:    
-
-#                 providers = [
-#                     ("CUDAExecutionProvider", {
-#                         "device_id": 0,
-#                         # Optional: additional options can be provided, e.g.
-#                         #"gpu_mem_limit":  * 1024 * 1024 * 1024,
-#                         #"gpu_mem_limit":  6 * 1024,
-#                         # "cudnn_conv_algo_search": "EXHAUSTIVE",
-#                         # "do_copy_in_default_stream": True,
-#                     })
-#                 ]
-
-#                 ort_sess = ort.InferenceSession(model_path, providers=providers)
-#                 #outputs = ort_sess.run(None, {'input': img.detach().numpy()})
-
-
-#                 print("Available providers:", ort.get_available_providers())
-#                 # Check the providers being used
-#                 print("Providers in use:", ort_sess.get_providers())
-
-#             # Load image
-#             img = cv.imread(tile)
-#             img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
-
-#             img_prec = normalize(img, [0.420, 0.411, 0.296], [0.213, 0.156, 0.143])
-#             img_prec = img_prec.astype(np.float32)
-#             img_prec = np.transpose(img_prec, (2,0,1))
-#             img_prec = np.expand_dims(img_prec, axis=0)
-
-#             # inference
-#             outputs = ort_sess.run(None, {'input': img_prec})
-#             pred = outputs[0][0]
-#             pred = np.squeeze(pred)
-
-#             # if not (np.max(pred) > 0.05):
-#             #     pred = pred*0
-
-#             pred = np.expand_dims(pred, axis=0)
-
-#             print("**PRED SHAPE**")
-#             print(pred.shape)
-#             print(pred.dtype)
-
-#             if "grayscale" in parameters["raster_outputs"]:
-#                 np2tif_2(pred, tile, processed_filepath, output_dtype=rio.float32)
-
-#             print(processed_filepath)
-#             tiles_processed.append(processed_filepath)
-            
-#                 # #add result filepath to list of results
-#                 # if not self.path_img_output.replace("_output", "_output_float") in self.output_files:
-#                 #     self.output_files.append(self.path_img_output.replace("_output", "_output_float"))
-
-            
-
-#             # if "binary" in parameters["raster_outputs"]:
-#             #     max_value = np.max(pred)
-#             #     value = parameters["hrch_threshold"]*max_value
-#             #     pred_binary = (pred_binary > value)*255
-
-#             #     np2tif_2(final_img_2, self.path_img, self.path_img_output.replace("_raster","_raster_binary"))
-
-#             #     #add result filepath to list of results
-#             #     if not self.path_img_output.replace("_raster","_raster_binary") in self.output_files:
-#             #         self.output_files.append(self.path_img_output.replace("_raster","_raster_binary"))
-
-#             #*************************************************
-
-#             if progress_callback is not None:
-#                 count = index+1
-#                 total = total_tiles
-#                 progress = count/total
-#                 status = "processing"
-#                 logs = "Inference progress..."
-#                 info = {
-#                     "count": count
-#                     , "total": total
-#                     , "progress": progress
-#                     , "status": status
-#                     , "logs": logs
-#                 }
-#                 progress_callback(info)
-
-#             if interruption_check is not None:
-#                 if interruption_check():
-#                     break
-
-#             count = count + 1
-
-#         results["tiles_processed"] = tiles_processed
-
-
-#     elif model == 'DeepForest':
-
-#         import pandas as pd
-#         import geopandas as gpd
-
-
-#         model_path = os.path.join(model_dir, "DeepForest.onnx")
-
-#         count = 0
-#         ort_sess = []
-#         temp_parameters = parameters.copy() #copy parameters
-
-#         total_tiles = len(parameters['tiles'])
-
-#         tiles_processed = []
-
-#         for index, tile in enumerate(parameters['tiles']):
-
-
-#             prefix = os.path.basename(tile)
-#             prefix, ext = os.path.splitext(prefix)
-#             output_path = parameters['processed_dir']
-#             processed_filepath = os.path.join(output_path, prefix + ".shp")
-
-#             if os.path.exists(processed_filepath):
-#                 # # Assign results
-#                 tiles_processed.append(processed_filepath)
-#                 continue
-
-#             temp_parameters.update({'input_raster_path': tile
-#                                     , 'prefix': prefix
-#                                     , 'output_path': output_path
-#                                     })
-
-#             if is_raster_empty(tile):
-#                 continue
-
-#             import onnxruntime as ort
-#             import cv2 as cv
-
-
-#             if count == 0 and type(ort_sess) != ort.InferenceSession:    
-
-#                 providers = [
-#                     ("CUDAExecutionProvider", {
-#                         "device_id": 0,
-#                         # Optional: additional options can be provided, e.g.
-#                         #"gpu_mem_limit":  * 1024 * 1024 * 1024,
-#                         #"gpu_mem_limit":  6 * 1024,
-#                         # "cudnn_conv_algo_search": "EXHAUSTIVE",
-#                         # "do_copy_in_default_stream": True,
-#                     })
-#                 ]
-
-#                 ort_sess = ort.InferenceSession(model_path, providers=providers)
-#                 #outputs = ort_sess.run(None, {'input': img.detach().numpy()})
-
-
-#                 print("Available providers:", ort.get_available_providers())
-#                 # Check the providers being used
-#                 print("Providers in use:", ort_sess.get_providers())
-
-#             # Load image
-#             img = cv.imread(tile)
-#             img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
-
-#             #img_prec = normalize(img, [0.420, 0.411, 0.296], [0.213, 0.156, 0.143])
-#             img_prec = img
-#             img_prec = img_prec.astype(np.float32)/255.0
-#             img_prec = np.transpose(img_prec, (2,0,1))
-#             img_prec = np.expand_dims(img_prec, axis=0)
-
-#             # inference
-#             outputs = ort_sess.run(None, {'input': img_prec})
-#             boxes = outputs[0] # bounding boxes
-#             # output[1] # scores
-#             # output[2] # labels
-
-#             print("**BOXES SHAPE**")
-#             print(boxes.shape)
-
-#             boxes_df = pd.DataFrame(boxes, columns=['xmin', 'ymin', 'xmax', 'ymax'])
-
-#             boxes_gdf = bb_2_geodataframe(boxes_df, temp_parameters)
-
-#             # save shapefile
-#             boxes_gdf.to_file(processed_filepath, driver='ESRI Shapefile')
-
-#             print(processed_filepath)
-#             tiles_processed.append(processed_filepath)
-
-#             #*************************************************
-
-#             if progress_callback is not None:
-#                 count = index+1
-#                 total = total_tiles
-#                 progress = count/total
-#                 status = "processing"
-#                 logs = "Inference progress..."
-#                 info = {
-#                     "count": count
-#                     , "total": total
-#                     , "progress": progress
-#                     , "status": status
-#                     , "logs": logs
-#                 }
-#                 progress_callback(info)
-
-#             if interruption_check is not None:
-#                 if interruption_check():
-#                     break
-
-#             count = count + 1
-
-#         results["tiles_processed"] = tiles_processed
-
-#     elif model == "Custom ONNX Model":
-
-#         model_path = parameters["custom_model_filepath"]
-
-#         count = 0
-#         ort_sess = []
-#         temp_parameters = parameters.copy() #copy parameters
-
-#         total_tiles = len(parameters['tiles'])
-
-#         tiles_processed = []
-
-#         for index, tile in enumerate(parameters['tiles']):
-
-#             prefix = os.path.basename(tile)
-#             prefix, ext = os.path.splitext(prefix)
-#             output_path = parameters['processed_dir']
-#             processed_filepath = os.path.join(output_path, prefix + ".shp")
-
-#             if os.path.exists(processed_filepath):
-#                 # # Assign results
-#                 tiles_processed.append(processed_filepath)
-#                 continue
-
-#             temp_parameters.update({'input_raster_path': tile
-#                                     , 'prefix': prefix
-#                                     , 'output_path': output_path
-#                                     })
-
-#             if is_raster_empty(tile):
-#                 continue
-
-#             import onnxruntime as ort
-#             import cv2 as cv
-#             import pandas as pd
-
-
-#             if count == 0 and type(ort_sess) != ort.InferenceSession:    
-
-#                 providers = [
-#                     ("CUDAExecutionProvider", {
-#                         "device_id": 0,
-#                         # Optional: additional options can be provided, e.g.
-#                         #"gpu_mem_limit":  * 1024 * 1024 * 1024,
-#                         #"gpu_mem_limit":  6 * 1024,
-#                         # "cudnn_conv_algo_search": "EXHAUSTIVE",
-#                         # "do_copy_in_default_stream": True,
-#                     })
-#                 ]
-
-#                 ort_sess = ort.InferenceSession(model_path, providers=providers)
-#                 #outputs = ort_sess.run(None, {'input': img.detach().numpy()})
-
-
-#                 print("Available providers:", ort.get_available_providers())
-#                 # Check the providers being used
-#                 print("Providers in use:", ort_sess.get_providers())
-
-#             # Load image
-#             img = cv.imread(tile)
-#             img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
-
-#             #img_prec = normalize(img, [0.420, 0.411, 0.296], [0.213, 0.156, 0.143])
-#             img_prec = img
-#             img_prec = img_prec.astype(np.float32)/255.0
-#             img_prec = np.transpose(img_prec, (2,0,1))
-#             img_prec = np.expand_dims(img_prec, axis=0)
-
-#             # inference
-#             outputs = ort_sess.run(None, {'images': img_prec}) # changes for yolo
-#             boxes = outputs[0][0] # bounding boxes
-#             boxes = np.transpose(boxes, (1,0))
-#             # output[1] # scores
-#             # output[2] # labels
-
-#             #boxes, scores = postprocess_yolo_output(outputs[0], input_shape=(960, 960), orig_shape=(960, 960), conf_thres=0.0)
-
-#             print("**BOXES SHAPE**")
-#             print(boxes.shape)
-
-#             boxes, scores = postprocess_yolo_output(outputs[0], input_shape=(960, 960), orig_shape=(960, 960), conf_thres=0.25)
-
-#             #boxes_df = pd.DataFrame(boxes, columns=['xmin', 'ymin', 'xmax', 'ymax', 'score'])
-#             boxes_df = pd.DataFrame(boxes, columns=['xmin', 'ymin', 'xmax', 'ymax'])
-
-#             boxes_gdf = bb_2_geodataframe(boxes_df, temp_parameters)
-
-#             # save shapefile
-#             boxes_gdf.to_file(processed_filepath, driver='ESRI Shapefile')
-
-#             print(processed_filepath)
-#             tiles_processed.append(processed_filepath)
-
-#             #*************************************************
-
-#             if progress_callback is not None:
-#                 count = index+1
-#                 total = total_tiles
-#                 progress = count/total
-#                 status = "processing"
-#                 logs = "Inference progress..."
-#                 info = {
-#                     "count": count
-#                     , "total": total
-#                     , "progress": progress
-#                     , "status": status
-#                     , "logs": logs
-#                 }
-#                 progress_callback(info)
-
-#             if interruption_check is not None:
-#                 if interruption_check():
-#                     break
-
-#             count = count + 1
-
-#         results["tiles_processed"] = tiles_processed
-
-#     return results
 
 def model_inference(parameters, progress_callback = None, interruption_check = None):
 
@@ -3714,141 +2854,6 @@ def save_shapefile_polygon_binary_raster_gdal(parameters):
     out_ds = None
     results["output_files"].append(output_filename)
     return results
-
-# def bb_2_geodataframe_gdal(df, parameters):
-#     """
-#     Replacement for bb_2_geodataframe using GDAL for raster info.
-#     """
-#     import pandas as pd
-#     import geopandas as gpd
-#     import shapely.geometry
-#     from osgeo import gdal, osr
-#     input_raster_path = parameters["input_raster_path"]
-#     try:
-#         ds = gdal.Open(input_raster_path)
-#         gt = ds.GetGeoTransform()
-#         proj = ds.GetProjection()
-#         width = ds.RasterXSize
-#         height = ds.RasterYSize
-#         srs = osr.SpatialReference()
-#         srs.ImportFromWkt(proj)
-#         epsg = srs.GetAttrValue('AUTHORITY', 1)
-#         has_epsg = True
-#         extent = (gt[0], gt[3] + height * gt[5], gt[0] + width * gt[1], gt[3])
-#     except Exception:
-#         from PIL import Image
-#         img = Image.open(input_raster_path)
-#         width, height = img.size
-#         extent = (0, 0, width, height)
-#         epsg = None
-#         has_epsg = False
-#     df_tree_polygons_test = pd.DataFrame()
-#     tree_bb = []
-#     count = 0
-#     for index, detection in df.iterrows():
-#         xmin = detection["xmin"]
-#         ymin = detection["ymin"]
-#         xmax = detection["xmax"]
-#         ymax = detection["ymax"]
-#         new_contour = [(xmin, ymin), (xmax, ymin), (xmax, ymax), (xmin, ymax)]
-#         coord_polygon = []
-#         for point in new_contour:
-#             x, y = point
-#             if has_epsg:
-#                 geo_x = gt[0] + x * gt[1] + y * gt[2]
-#                 geo_y = gt[3] + x * gt[4] + y * gt[5]
-#                 new_coord = (geo_x, geo_y)
-#             else:
-#                 new_coord = (x, y - height)
-#             coord_polygon.append(new_coord)
-#         if len(coord_polygon) > 2:
-#             polygon_object = shapely.geometry.Polygon(coord_polygon)
-#             df_item_test = pd.DataFrame({
-#                 #'Class': 'tree', 
-#                 'ID': count, 
-#                 'label': 'tree'}, index=[count])
-#             df_tree_polygons_test = pd.concat((df_tree_polygons_test, df_item_test))
-#             tree_bb.append(polygon_object)
-#             count += 1
-#     gdf_trees = gpd.GeoDataFrame(df_tree_polygons_test, geometry=tree_bb)
-#     if has_epsg and epsg:
-#         gdf_trees = safe_set_crs(gdf_trees, epsg=epsg)
-#     return gdf_trees
-
-# def bb_2_geodataframe_gdal(df, parameters):
-#     """
-#     Convert bounding box DataFrame to a list of polygons and compute area_m2, lat, lon, circularity using only GDAL and numpy.
-#     Returns a list of dicts, each representing a feature.
-#     """
-#     from osgeo import gdal
-#     import numpy as np
-#     import shapely.geometry
-
-#     input_raster_path = parameters["input_raster_path"]
-
-#     try:
-#         ds = gdal.Open(input_raster_path)
-#         gt = ds.GetGeoTransform()
-#         proj = ds.GetProjection()
-#         width = ds.RasterXSize
-#         height = ds.RasterYSize
-#         has_epsg = True
-#         ds = None
-#     except Exception:
-#         width = parameters.get("img_width", None)
-#         height = parameters.get("img_height", None)
-#         gt = None
-#         proj = None
-#         has_epsg = False
-
-#     features = []
-#     for index, detection in df.iterrows():
-#         xmin = detection["xmin"]
-#         ymin = detection["ymin"]
-#         xmax = detection["xmax"]
-#         ymax = detection["ymax"]
-
-#         # Convert pixel coordinates to geo coordinates if possible
-#         if has_epsg and gt:
-#             def px2geo(x, y):
-#                 geo_x = gt[0] + x * gt[1] + y * gt[2]
-#                 geo_y = gt[3] + x * gt[4] + y * gt[5]
-#                 return (geo_x, geo_y)
-#             coords = [
-#                 px2geo(xmin, ymin),
-#                 px2geo(xmax, ymin),
-#                 px2geo(xmax, ymax),
-#                 px2geo(xmin, ymax)
-#             ]
-#         else:
-#             coords = [
-#                 (xmin, ymin),
-#                 (xmax, ymin),
-#                 (xmax, ymax),
-#                 (xmin, ymax)
-#             ]
-
-#         # Create polygon and calculate properties
-#         polygon = shapely.geometry.Polygon(coords)
-#         area = polygon.area
-#         perim = polygon.length
-#         centroid = polygon.centroid
-#         lon = centroid.x
-#         lat = centroid.y
-#         circularity = 4 * np.pi * area / perim**2 if perim > 0 else 0
-
-#         features.append({
-#             "geometry": polygon,
-#             "area_m2": area,
-#             "lon": lon,
-#             "lat": lat,
-#             "circularity": circularity,
-#             "ID": index,
-#             "Class": "tree",
-#             "label": "tree"
-#         })
-
-#     return features
 
 def is_geotif_gdal(filepath):
     """

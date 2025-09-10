@@ -137,6 +137,7 @@ class InstallerManager():
                          #, 'deepforest==1.4.1'                         
                          #, 'torch==2.5.1'
                          #, 'torchvision==0.20.1'
+                         #, 'scikit-learn==1.6.1'
                          ]
         self.packages_import = [
                                 'gdown' 
@@ -151,6 +152,7 @@ class InstallerManager():
                                 #, 'deepforest'
                                 #, "torch"
                                 #, "tochvision"
+                                #, 'sklearn'
                                 ]
 
         #gdown

@@ -26,7 +26,7 @@
          <property name="geometry">
           <rect>
            <x>0</x>
-           <y>0</y>
+           <y>-96</y>
            <width>703</width>
            <height>1002</height>
           </rect>
@@ -830,7 +830,7 @@ padding: 2px 4px;</string>
                  <item row="2" column="0">
                   <widget class="QLabel" name="label_20">
                    <property name="text">
-                    <string>Max px per tile:</string>
+                    <string>Tile size:</string>
                    </property>
                   </widget>
                  </item>
@@ -860,7 +860,7 @@ padding: 2px 4px;</string>
                  <item row="3" column="1">
                   <widget class="QSpinBox" name="spinBox_overlap">
                    <property name="suffix">
-                    <string>%</string>
+                    <string> px</string>
                    </property>
                    <property name="maximum">
                     <number>80</number>

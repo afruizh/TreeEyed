@@ -7,21 +7,21 @@ name=TreeEyed
 qgisMinimumVersion=3.0
 description=TreeEyed is a QGIS plugin for tree monitoring using AI.
 version=0.2.0
-author=Andrés Felipe Ruiz-Hurtado, Tropical Forages - CIAT 
+author=Andres Felipe Ruiz-Hurtado, Tropical Forages Program - CIAT 
 email=a.f.ruiz@cgiar.org, anfruizhu@unal.edu.co
 
 about=
     TreeEyed is a QGIS plugin for tree monitoring using AI.
     Features:
-    This plugins seeks to integrate existing and custom AI models for tree monitoring (semantic segmentation, instance segmentation, and object detection) in RGB imagery.
+    This plugin seeks to integrate existing and custom AI models for tree monitoring (semantic segmentation, instance segmentation, and object detection) in RGB imagery.
     Dependencies:
-    -rasterio
-    -pycocotools
-    -torch
-    -torchvision
     -opencv-python
+    -onnxruntime-gpu
+    -gdown
+    -pycocotools
     -deepforest
     -HighResCanopyHeight
+    -VHRTrees
 
 tracker=https://github.com/afruizh/TreeEyed/issues
 repository=https://github.com/afruizh/TreeEyed
@@ -34,7 +34,7 @@ hasProcessingProvider=no
 # changelog=
 
 # Tags are comma separated with spaces allowed
-tags=ai, tree, tree monitoring, dataset, validation, COCO, raster, vector, digitizing, neural network, automation, machine learning, image, analysis, segmentation, detection, semantic segmentation, instance segmentation, computer vision, deep learning, remote sensing, satellite imagery, drone imagery, silvopasture, silvopastoral systems, tree crown, tree count, tree area, canopy, canopy height, python, torch, deepforest, highrescanopyheight, maskrcnn
+tags=ai, tree, tree monitoring, dataset, validation, COCO, raster, vector, digitizing, neural network, automation, machine learning, image, analysis, segmentation, detection, semantic segmentation, instance segmentation, computer vision, deep learning, remote sensing, satellite imagery, drone imagery, silvopasture, silvopastoral systems, tree crown, tree count, tree area, canopy, canopy height, python, deepforest, highrescanopyheight, maskrcnn, DINOv2, VHRTrees, ONNX, ONNXRuntime 
 
 homepage=https://treeeyed.readthedocs.io/en/latest/
 category=Plugins
