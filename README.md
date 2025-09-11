@@ -133,7 +133,7 @@ python src/tree_eyed/tree_eyed_app.py --config /app/data/example_01.json
 - [X] Improved layers visualization using Viridis color palette
 - [X] Automatic tiling (tiling, processing, merging)
 - [X] Cache System
-- [X] Update GUI and look-and-feel
+- [X] Update GUI and look-and-feel, improved GUI options
 - [X] Added "Simple Inference" QGIS processing algorithm
 - [X] Improved processing architecture (interface, processor, tree_eyed_processor)
 - [X] Added CLI using `tree_eyed_app.py`
@@ -142,7 +142,7 @@ python src/tree_eyed/tree_eyed_app.py --config /app/data/example_01.json
 - [X] Additional postprocessing steps (non-max supression)
 - [X] Migration rasterio to gdal
 - [X] Migration geopandas to gdal
-- [ ] Improved export to COCO dataset
+- [x] Improved export to COCO dataset
 
 
 
