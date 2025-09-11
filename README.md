@@ -3,7 +3,7 @@
   <h1 align="center">TreeEyed QGIS Plugin version 0.2.0</h1>
   <p align=center><a href="https://github.com/afruizh/TreeEyed/releases/tag/v0.2.0-experimental">Download experimental release</a></a>
   <p align=center><a href="https://treeeyed.readthedocs.io/en/latest/">Documentation</a></a>
-  <p align=center><a href="https://treeeyed.readthedocs.io/en/latest/">Discord</a></a>
+  <p align=center><a href="https://discord.gg/cXZhWgfqt2">Discord</a></a>
 </p>
 
 
