@@ -522,6 +522,16 @@ class SettingsDialog(QtWidgets.QDialog, FORM_CLASS_SETTINGS_DIALOG):
 
         self.pushButton_show.clicked.connect(self._handle_buttonShowFolder)
 
+        self.pushButton_add_cuda_dir.clicked.connect(self._handle_addCUDAPath)
+        self.pushButton_remove_cuda_dir.clicked.connect(self._handle_removeCUDAPath)
+
+        # Load elements in the listWidget_cuda_paths
+        self.cuda_dirs_listWidget.clear()
+        print("CUDA dirs:")
+        for dir in self.get_cuda_dirs():
+            print(dir)
+            self.cuda_dirs_listWidget.addItem(dir)
+
     def _update_model_dir(self, model_dir):
 
         print(model_dir)
@@ -538,4 +548,50 @@ class SettingsDialog(QtWidgets.QDialog, FORM_CLASS_SETTINGS_DIALOG):
             QDesktopServices.openUrl(QUrl.fromLocalFile(filepath))
 
     
+    def _handle_addCUDAPath(self):
+
+        from qgis.PyQt.QtWidgets import QFileDialog
+
+        dir = QFileDialog.getExistingDirectory(self, "Select directory")
+        if not dir:
+            return
+        self.cuda_dirs_listWidget.addItem(dir)
+
+        # update qgssettings
+        self.update_cuda_settings()
+        
+
+    def update_cuda_settings(self):
+        current_dirs = []
+        for i in range(self.cuda_dirs_listWidget.count()):
+            current_dirs.append(self.cuda_dirs_listWidget.item(i).text())
+        plugin_name = "TreeEyed"
+        QgsSettings().setValue(plugin_name + "/cudaDirs", current_dirs)
+
+        # Add cuda paths in setting to environment path
+        dirs = QgsSettings().value(plugin_name + "/cudaDirs", [])
+        sep = os.pathsep
+        current_path = os.environ.get("PATH", "")
+        current_path_list = current_path.split(sep) if current_path else []
+        # Add only dirs not already in PATH, and keep CUDA dirs first
+        new_path_list = [d for d in dirs if d and d not in current_path_list] + current_path_list
+        os.environ["PATH"] = sep.join(new_path_list)
+        for dir in dirs:
+            os.add_dll_directory(dir)
+
+    def _handle_removeCUDAPath(self):
+
+        #remove selected items
+        selected_items = self.cuda_dirs_listWidget.selectedItems()
+        if not selected_items:
+            return
+        for item in selected_items:
+            self.cuda_dirs_listWidget.takeItem(self.cuda_dirs_listWidget.row(item))
+        # update qgssettings
+        self.update_cuda_settings()
+
+    def get_cuda_dirs(self):
+
+        plugin_name = "TreeEyed"
+        return QgsSettings().value(plugin_name + "/cudaDirs", [])
 

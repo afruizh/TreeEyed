@@ -302,6 +302,24 @@ class TreeEyed:
                 #Load 
                 from .tree_eyed_processor import TreeEyedProcessor
                 self.tree_eyed_processor = TreeEyedProcessor(self.iface)
+
+                # Add cuda paths in setting to environment path
+                from qgis.core import QgsSettings  
+                plugin_name = "TreeEyed"
+                dirs = QgsSettings().value(plugin_name + "/cudaDirs", [])
+                sep = os.pathsep
+                current_path = os.environ.get("PATH", "")
+                if current_path:
+                    new_path = sep.join(dirs) + sep + current_path
+                else:
+                    new_path = sep.join(dirs)
+                os.environ["PATH"] = new_path
+                # add to dll directory
+                for dir in dirs:
+                    os.add_dll_directory(dir)
+                print("PATH:", os.environ["PATH"])
+
+                
                 
                 # Additional Connections
                 self.dockwidget.process_signal.connect(self.tree_eyed_processor._process)
