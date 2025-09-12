@@ -1,0 +1,30 @@
+{
+    "model": "HighResCanopyHeight" //inference model to use
+    , "model_dir": ""
+    , "output_path": "D:\\local_mydata\\tree_eye_tests\\temporal"
+    , "prefix": "inference_0001"
+    , "input_raster_path": "" // input raster path
+    , "hrch_type": "Satellite"
+    , "hrch_threshold": 0.15
+    , "layer": <QgsRasterLayer: "HSJ_4_77" (gdal)>
+    , "raster2vector_layer": <QgsRasterLayer: "HSJ_4_77" (gdal)>
+    , "raster2vector_threshold": 15
+    , "filter_area_layer": <QgsVectorLayer: "results99_vector" (ogr)>
+    , "filter_area_area": 100.0
+    , "task": False
+    , "raster_outputs": ["binary"]
+    , "vector_outputs": ["polygons"]
+    , "extent_type": "Layer extent"
+    , "extent": "<QgsRectangle: 0 0, 0 0>"
+    , "extent_crs": <QgsCoordinateReferenceSystem: EPSG:4326>
+    , "input_image": <QgsRasterLayer: "HSJ_4_77" (gdal)>
+    , "annotations": <QgsVectorLayer: "results99_vector" (ogr)>
+    , "num_tiles": 1024
+    , "validate_ground_truth": ""
+    , "validate_prediction": ""
+    , "output_format": "PNG"
+    , "overlap": 0
+    , "tile_size": 1024
+    , "force_tiling": False
+    , "epsg":""
+}

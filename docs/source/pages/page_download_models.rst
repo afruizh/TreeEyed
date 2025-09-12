@@ -21,7 +21,9 @@ The first time you open the plugin a message will appear to download the models 
 
 You can also download the models by pressing de **Settings** button in the plugin and then the **Download Models** button.
 
-Models can also be downloaded manually in the following `link <https://drive.google.com/drive/folders/1tRF_k9UoBmQx8AoudaZC-5Kg2RdOYwmy?usp=sharing>`_
+ONNX models can also be downloaded manually in the following `link <https://drive.google.com/drive/folders/1-dBhxprgVcY8hc2KRJ65CzyyEcOh4zr5?usp=drive_link>`_
+
+(Legacy PT, PTH and CPKPT models can be downloaded from the following `legacy link <https://drive.google.com/drive/folders/1tRF_k9UoBmQx8AoudaZC-5Kg2RdOYwmy?usp=sharing>`_.)
 
 ==========================
 Download Models Video

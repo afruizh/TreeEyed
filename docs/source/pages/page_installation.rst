@@ -36,10 +36,8 @@ This plugin requires additional python packages that can be installed by using t
 
 * rasterio
 * pycocotools
-* torch
-* torchvision
 * opencv-python
-* deepforest
+* onnxruntime-gpu
 
 A **dependencies** folder with the required packages will be added in the plugin root folder.
 

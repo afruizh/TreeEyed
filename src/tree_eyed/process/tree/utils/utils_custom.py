@@ -1,12 +1,13 @@
-from rasterio.mask import mask
-import rasterio as rio
+
+#from rasterio.mask import mask
+#import rasterio as rio
 #import numpy as np
 import os
 #import subprocess
 import cv2 as cv
 #import json
 #from PIL import Image
-import geopandas as gpd
+#import geopandas as gpd
 
 import shapely
 
@@ -106,6 +107,36 @@ def np2tif_extent(np_image, extent, epsg, filepath):
     #with rio.open(filepath, 'w', crs='EPSG:3857', **profile) as dst:
     #    pass # write data to this Web Mercator projection dataset.
 
+def np2tif_extent_gdal(np_image, extent, epsg, filepath):
+    """Save numpy array to GeoTIFF using GDAL, with extent and EPSG."""
+    from osgeo import gdal, osr
+    import numpy as np
+    (h, w, channels) = np_image.shape
+    # Convert to RGB if needed
+    if channels == 3:
+        np_image = cv.cvtColor(np_image, cv.COLOR_BGR2RGB)
+    # GDAL expects bands in last dimension
+    np_image = np_image.transpose((2, 0, 1))
+    # Create GDAL driver
+    driver = gdal.GetDriverByName('GTiff')
+    out_ds = driver.Create(filepath, w, h, channels, gdal.GDT_Byte)
+    # Set geotransform from extent
+    xmin = extent.xMinimum()
+    ymin = extent.yMinimum()
+    xmax = extent.xMaximum()
+    ymax = extent.yMaximum()
+    gt = [xmin, (xmax-xmin)/w, 0, ymax, 0, -(ymax-ymin)/h]
+    out_ds.SetGeoTransform(gt)
+    # Set projection
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(int(str(epsg).replace('EPSG:', '')))
+    out_ds.SetProjection(srs.ExportToWkt())
+    # Write bands
+    for i in range(channels):
+        out_ds.GetRasterBand(i+1).WriteArray(np_image[i])
+    out_ds.FlushCache()
+    out_ds = None
+
 
 def raster_extract(raster_filepath, extent, epsg, filepath):
     """extract raster region by extent and epsg
@@ -119,6 +150,7 @@ def raster_extract(raster_filepath, extent, epsg, filepath):
                    , extent.xMaximum()
                    , extent.yMaximum())
         
+        import geopandas as gpd
         gdf = gpd.GeoDataFrame(geometry=[geom])
         gdf = gdf.set_crs(epsg=epsg.replace("EPSG:",""))
         gdf = gdf.to_crs(crs=src.crs)

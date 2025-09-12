@@ -26,14 +26,27 @@
          <property name="geometry">
           <rect>
            <x>0</x>
-           <y>0</y>
-           <width>695</width>
-           <height>910</height>
+           <y>-96</y>
+           <width>703</width>
+           <height>1002</height>
           </rect>
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_2">
           <item>
            <layout class="QHBoxLayout" name="horizontalLayout">
+            <item>
+             <spacer name="horizontalSpacer_5">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
             <item>
              <widget class="QLabel" name="label_5">
               <property name="text">
@@ -73,6 +86,13 @@
           <item>
            <layout class="QHBoxLayout" name="horizontalLayout_2">
             <item>
+             <widget class="QPushButton" name="pushButton_simple_inference">
+              <property name="text">
+               <string>Simple Inference</string>
+              </property>
+             </widget>
+            </item>
+            <item>
              <spacer name="horizontalSpacer_2">
               <property name="orientation">
                <enum>Qt::Horizontal</enum>
@@ -105,123 +125,265 @@
             <property name="title">
              <string>Input</string>
             </property>
-            <layout class="QFormLayout" name="formLayout_2">
-             <item row="0" column="0">
-              <widget class="QLabel" name="label_10">
+            <layout class="QVBoxLayout" name="verticalLayout_7">
+             <item>
+              <layout class="QFormLayout" name="formLayout_2">
+               <item row="1" column="0">
+                <widget class="QLabel" name="label_10">
+                 <property name="enabled">
+                  <bool>true</bool>
+                 </property>
+                 <property name="text">
+                  <string>Input layer:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QgsMapLayerComboBox" name="mMapLayerComboBox_inputLayer">
+                 <property name="toolTip">
+                  <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Layer which will be processed.&lt;/span&gt;&lt;/p&gt;&lt;p&gt;Most probably this is your ortophoto or map source (like satellite image from google earth).&lt;br/&gt;Needs to be a raster layer.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="0">
+                <widget class="QLabel" name="label_2">
+                 <property name="text">
+                  <string>Extent</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="1">
+                <widget class="QComboBox" name="comboBox_extent">
+                 <item>
+                  <property name="text">
+                   <string>Current View</string>
+                  </property>
+                 </item>
+                 <item>
+                  <property name="text">
+                   <string>Layer extent</string>
+                  </property>
+                 </item>
+                 <item>
+                  <property name="text">
+                   <string>Custom extent</string>
+                  </property>
+                 </item>
+                </widget>
+               </item>
+               <item row="3" column="1">
+                <widget class="QgsExtentGroupBox" name="mExtentGroupBox">
+                 <property name="title">
+                  <string>Extent</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="5" column="1">
+                <widget class="QLabel" name="label_spatial_resolution">
+                 <property name="autoFillBackground">
+                  <bool>false</bool>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">background-color: white;
+border: 1px solid gray;
+border-radius: 3px;
+padding: 2px 4px;</string>
+                 </property>
+                 <property name="text">
+                  <string>--</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="5" column="0">
+                <widget class="QLabel" name="label_17">
+                 <property name="text">
+                  <string>Layer Spatial resolution:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="6" column="0">
+                <widget class="QLabel" name="label_18">
+                 <property name="text">
+                  <string>Map Spatial resolution:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="6" column="1">
+                <widget class="QLabel" name="label_spatial_resolution_map">
+                 <property name="styleSheet">
+                  <string notr="true">background-color: white;
+border: 1px solid gray;
+border-radius: 3px;
+padding: 2px 4px;</string>
+                 </property>
+                 <property name="text">
+                  <string>--</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <widget class="QgsCollapsibleGroupBox" name="mGroupBox_advanced">
                <property name="enabled">
                 <bool>true</bool>
                </property>
-               <property name="text">
-                <string>Input layer:</string>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="1">
-              <widget class="QgsMapLayerComboBox" name="mMapLayerComboBox_inputLayer">
-               <property name="toolTip">
-                <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Layer which will be processed.&lt;/span&gt;&lt;/p&gt;&lt;p&gt;Most probably this is your ortophoto or map source (like satellite image from google earth).&lt;br/&gt;Needs to be a raster layer.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="0">
-              <widget class="QLabel" name="label_2">
-               <property name="text">
-                <string>Extent</string>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="1">
-              <widget class="QComboBox" name="comboBox_extent">
-               <item>
-                <property name="text">
-                 <string>Current View</string>
-                </property>
-               </item>
-               <item>
-                <property name="text">
-                 <string>Layer extent</string>
-                </property>
-               </item>
-               <item>
-                <property name="text">
-                 <string>Custom extent</string>
-                </property>
-               </item>
-              </widget>
-             </item>
-             <item row="2" column="1">
-              <widget class="QgsExtentGroupBox" name="mExtentGroupBox">
                <property name="title">
-                <string>Extent</string>
+                <string>Advanced</string>
                </property>
-              </widget>
-             </item>
-             <item row="3" column="0">
-              <widget class="QLabel" name="label_17">
-               <property name="text">
-                <string>Spatial resolution:</string>
+               <property name="collapsed">
+                <bool>false</bool>
                </property>
-              </widget>
-             </item>
-             <item row="3" column="1">
-              <widget class="QLabel" name="label_spatial_resolution">
-               <property name="text">
-                <string>--</string>
-               </property>
-              </widget>
-             </item>
-             <item row="4" column="0">
-              <widget class="QLabel" name="label_18">
-               <property name="text">
-                <string>Map Spatial resolution:</string>
-               </property>
-              </widget>
-             </item>
-             <item row="4" column="1">
-              <widget class="QLabel" name="label_spatial_resolution_map">
-               <property name="text">
-                <string>--</string>
-               </property>
+               <layout class="QFormLayout" name="formLayout_10">
+                <item row="2" column="1">
+                 <widget class="QSpinBox" name="spinBox_tile_size">
+                  <property name="suffix">
+                   <string> px</string>
+                  </property>
+                  <property name="maximum">
+                   <number>5000</number>
+                  </property>
+                  <property name="value">
+                   <number>1024</number>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="0">
+                 <widget class="QLabel" name="label_26">
+                  <property name="text">
+                   <string>Tile size:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="3" column="0">
+                 <widget class="QLabel" name="label_29">
+                  <property name="text">
+                   <string>Overlap:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="3" column="1">
+                 <widget class="QgsSpinBox" name="spinBox_tile_overlap">
+                  <property name="suffix">
+                   <string> px</string>
+                  </property>
+                  <property name="maximum">
+                   <number>512</number>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="0">
+                 <widget class="QLabel" name="label_27">
+                  <property name="text">
+                   <string>Use custom tile size:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="1">
+                 <widget class="QCheckBox" name="checkBox_force_tiling">
+                  <property name="text">
+                   <string/>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
               </widget>
              </item>
             </layout>
            </widget>
           </item>
           <item>
-           <widget class="QgsCollapsibleGroupBox" name="mGroupBox_3">
+           <widget class="QgsCollapsibleGroupBox" name="mGroupBox_output">
             <property name="title">
              <string>Output</string>
             </property>
-            <layout class="QFormLayout" name="formLayout">
-             <item row="0" column="0">
-              <widget class="QLabel" name="label_7">
-               <property name="text">
-                <string>Output directory:</string>
-               </property>
-              </widget>
+            <layout class="QVBoxLayout" name="verticalLayout_8">
+             <item>
+              <layout class="QFormLayout" name="formLayout_12">
+               <item row="0" column="0">
+                <widget class="QLabel" name="label_7">
+                 <property name="text">
+                  <string>Output directory:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <layout class="QHBoxLayout" name="horizontalLayout_6">
+                 <item>
+                  <widget class="QgsFileWidget" name="mQgsFileWidget">
+                   <property name="storageMode">
+                    <enum>QgsFileWidget::GetDirectory</enum>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="m_pushButton_openfolder">
+                   <property name="toolTip">
+                    <string>Show current folder in the explorer</string>
+                   </property>
+                   <property name="text">
+                    <string>Show</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="label_8">
+                 <property name="text">
+                  <string>Output name:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <layout class="QHBoxLayout" name="horizontalLayout_7">
+                 <item>
+                  <widget class="QLineEdit" name="lineEdit_prefix">
+                   <property name="text">
+                    <string>results</string>
+                   </property>
+                   <property name="placeholderText">
+                    <string/>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="m_pushButton_increment">
+                   <property name="toolTip">
+                    <string>Increment the id of name avoiding pre-existing files</string>
+                   </property>
+                   <property name="text">
+                    <string>Next name</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+              </layout>
              </item>
-             <item row="0" column="1">
-              <widget class="QgsFileWidget" name="mQgsFileWidget">
-               <property name="storageMode">
-                <enum>QgsFileWidget::GetDirectory</enum>
+             <item>
+              <widget class="QgsCollapsibleGroupBox" name="mGroupBox">
+               <property name="enabled">
+                <bool>true</bool>
                </property>
-              </widget>
-             </item>
-             <item row="1" column="0">
-              <widget class="QLabel" name="label_8">
-               <property name="text">
-                <string>Output name:</string>
+               <property name="title">
+                <string>Advanced</string>
                </property>
-              </widget>
-             </item>
-             <item row="1" column="1">
-              <widget class="QLineEdit" name="lineEdit_prefix">
-               <property name="text">
-                <string>results</string>
+               <property name="collapsed">
+                <bool>true</bool>
                </property>
-               <property name="placeholderText">
-                <string/>
-               </property>
+               <layout class="QFormLayout" name="formLayout">
+                <item row="0" column="1">
+                 <widget class="QPushButton" name="m_pushButton_clear_cache">
+                  <property name="toolTip">
+                   <string>removes .cache_tree_eyed folder in the current Output directory that is used to saved tiles and processed tiles</string>
+                  </property>
+                  <property name="text">
+                   <string>Clear Cache in Output directory</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
               </widget>
              </item>
             </layout>
@@ -270,13 +432,23 @@
                      <string>DeepForest</string>
                     </property>
                    </item>
+                   <item>
+                    <property name="text">
+                     <string>VHRTrees</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>Custom ONNX Model</string>
+                    </property>
+                   </item>
                   </widget>
                  </item>
                 </layout>
                </widget>
               </item>
               <item>
-               <widget class="QgsCollapsibleGroupBox" name="mGroupBox">
+               <widget class="QgsCollapsibleGroupBox" name="mGroupBox_result_types">
                 <property name="title">
                  <string>Result types</string>
                 </property>
@@ -295,8 +467,11 @@
                      <property name="enabled">
                       <bool>true</bool>
                      </property>
+                     <property name="toolTip">
+                      <string>Tree Cover (binary mask: 1 = tree, 0 = background), formely Binary</string>
+                     </property>
                      <property name="text">
-                      <string>Binary</string>
+                      <string>Tree Cover</string>
                      </property>
                      <property name="checked">
                       <bool>true</bool>
@@ -305,8 +480,11 @@
                    </item>
                    <item>
                     <widget class="QCheckBox" name="checkBox_raster_grayscale">
+                     <property name="toolTip">
+                      <string>Canopy Height (grayscale: pixel values in meters = height), formely Grayscale</string>
+                     </property>
                      <property name="text">
-                      <string>Grayscale</string>
+                      <string>Canopy Height</string>
                      </property>
                     </widget>
                    </item>
@@ -339,8 +517,11 @@
                      <property name="enabled">
                       <bool>true</bool>
                      </property>
+                     <property name="toolTip">
+                      <string>Tree Crowns (outlines of detected tree cover), formely Polygons</string>
+                     </property>
                      <property name="text">
-                      <string>Polygons</string>
+                      <string>Tree Crowns</string>
                      </property>
                      <property name="checked">
                       <bool>true</bool>
@@ -349,15 +530,21 @@
                    </item>
                    <item>
                     <widget class="QCheckBox" name="checkBox_vector_bounding_boxes">
+                     <property name="toolTip">
+                      <string>Tree Bounding Boxes (rectangles enclosing trees), formerly Bounding Boxes</string>
+                     </property>
                      <property name="text">
-                      <string>Bounding Boxes</string>
+                      <string>Tree Bounding Boxes</string>
                      </property>
                     </widget>
                    </item>
                    <item>
                     <widget class="QCheckBox" name="checkBox_vector_centroids">
+                     <property name="toolTip">
+                      <string>Tree Locations (centroid point for each tree), formerly Centroids</string>
+                     </property>
                      <property name="text">
-                      <string>Centroids</string>
+                      <string>Tree Locations</string>
                      </property>
                     </widget>
                    </item>
@@ -442,10 +629,26 @@
                </widget>
               </item>
               <item>
-               <widget class="QPushButton" name="pushButton_process">
-                <property name="text">
-                 <string>Process</string>
+               <widget class="QgsCollapsibleGroupBox" name="mGroupBox_Custom">
+                <property name="title">
+                 <string>Parameters Custom ONNX model</string>
                 </property>
+                <layout class="QFormLayout" name="formLayout_11">
+                 <item row="0" column="0">
+                  <widget class="QLabel" name="label_28">
+                   <property name="text">
+                    <string>Model:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="1">
+                  <widget class="QgsFileWidget" name="mQgsFileWidget_model_filepath">
+                   <property name="filter">
+                    <string>*.onnx</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
                </widget>
               </item>
               <item>
@@ -460,6 +663,13 @@
                  </size>
                 </property>
                </spacer>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_process">
+                <property name="text">
+                 <string>Process</string>
+                </property>
+               </widget>
               </item>
              </layout>
             </widget>
@@ -620,28 +830,70 @@
                  <item row="2" column="0">
                   <widget class="QLabel" name="label_20">
                    <property name="text">
-                    <string>Divisions:</string>
+                    <string>Tile size:</string>
                    </property>
                   </widget>
                  </item>
                  <item row="2" column="1">
                   <widget class="QSpinBox" name="spinBox_tiles">
+                   <property name="suffix">
+                    <string> px</string>
+                   </property>
                    <property name="minimum">
-                    <number>1</number>
+                    <number>100</number>
                    </property>
                    <property name="maximum">
-                    <number>100</number>
+                    <number>100000</number>
+                   </property>
+                   <property name="value">
+                    <number>1024</number>
                    </property>
                   </widget>
                  </item>
+                 <item row="3" column="0">
+                  <widget class="QLabel" name="label_24">
+                   <property name="text">
+                    <string>Overlap:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="3" column="1">
+                  <widget class="QSpinBox" name="spinBox_overlap">
+                   <property name="suffix">
+                    <string> px</string>
+                   </property>
+                   <property name="maximum">
+                    <number>80</number>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="4" column="0">
+                  <widget class="QLabel" name="label_25">
+                   <property name="text">
+                    <string>Output format:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="4" column="1">
+                  <widget class="QComboBox" name="comboBox_output_format">
+                   <item>
+                    <property name="text">
+                     <string>PNG</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>JPG</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>TIF</string>
+                    </property>
+                   </item>
+                  </widget>
+                 </item>
                 </layout>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="pushButton_export_dataset">
-                <property name="text">
-                 <string>Export dataset</string>
-                </property>
                </widget>
               </item>
               <item>
@@ -656,6 +908,13 @@
                  </size>
                 </property>
                </spacer>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_export_dataset">
+                <property name="text">
+                 <string>Export dataset</string>
+                </property>
+               </widget>
               </item>
              </layout>
             </widget>
@@ -708,13 +967,6 @@
                </widget>
               </item>
               <item>
-               <widget class="QPushButton" name="pushButton_validate">
-                <property name="text">
-                 <string>Validate</string>
-                </property>
-               </widget>
-              </item>
-              <item>
                <spacer name="verticalSpacer_3">
                 <property name="orientation">
                  <enum>Qt::Vertical</enum>
@@ -726,6 +978,13 @@
                  </size>
                 </property>
                </spacer>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_validate">
+                <property name="text">
+                 <string>Validate</string>
+                </property>
+               </widget>
               </item>
              </layout>
             </widget>
@@ -780,6 +1039,11 @@
    <class>QgsMapLayerComboBox</class>
    <extends>QComboBox</extends>
    <header>qgsmaplayercombobox.h</header>
+  </customwidget>
+  <customwidget>
+   <class>QgsSpinBox</class>
+   <extends>QSpinBox</extends>
+   <header>qgsspinbox.h</header>
   </customwidget>
  </customwidgets>
  <resources/>

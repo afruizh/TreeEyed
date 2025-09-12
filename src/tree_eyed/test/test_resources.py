@@ -31,7 +31,7 @@ class TreeEyedDialogTest(unittest.TestCase):
 
     def test_icon_png(self):
         """Test we can click OK."""
-        path = ':/plugins/TreeEyed/icon.png'
+        path = ':/plugins/TreeEyed/res/icon.png'
         icon = QIcon(path)
         self.assertFalse(icon.isNull())
 
