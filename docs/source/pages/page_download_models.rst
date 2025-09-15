@@ -1,6 +1,9 @@
 Downloading models
 ===================
 
+.. image:: ../res/models.gif
+   :alt: Plugin Installation
+
 ===================
 Models
 ===================

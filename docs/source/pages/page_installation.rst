@@ -18,7 +18,7 @@ Plugin installation
 
 TreeEyed plugin is now available directly in the `QGIS Python Plugins Repository <https://plugins.qgis.org/plugins/tree_eyed/>`_ and can be installed using the plugin manager in QGIS.
 
-.. image:: ../res/plugin_install.gif
+.. image:: ../res/installation.gif
    :alt: Plugin Installation
 
 For the QGIS plugin installation using a compressed file follow the next steps:
