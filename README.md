@@ -43,7 +43,7 @@ TreeEyed plugin is now available directly in the [QGIS Python Plugins Repository
 
 ![Download Models](res/models.gif)
 
-> **Note:** After downloading the models, set the correct path for **Models Directory** in the TreeEyed Settings menu.
+> ⚠️ **Note:** After downloading the models, set the correct path for **Models Directory** in the TreeEyed Settings menu.
 
 ## Documentation
 
@@ -55,10 +55,10 @@ This plugin works on QGIS, and it was tested on **Windows 11** using **QGIS 3.40
 
 It requires additional python packages that can be installed by using the plugin and following the installation instructions:
 
-* rasterio
-* pycocotools
 * opencv-python
 * onnxruntime-gpu
+* pycocotools
+* gdown
 
 A **dependencies** folder with the required packages will be added in the plugin root folder.
 
@@ -79,12 +79,14 @@ For unresolved issues, please open an issue on the [GitHub repository](https://g
 To use TreeEyed functionality in CLI mode you need to create a python environment using:
 
 ```
-conda create -n tree_eyed_env python=3.12
-conda activate tree_eyed_env
-pip install --no-cache-dir -r requirements.txt
+conda env create -f environment.yml
+conda activate tree_eyed
 ```
 
+To use GPU processing, make sure cuda and cudnn DLLs are installed in the systen or install the following dependencies:
+
 ```
+conda activate tree_eyed
 conda install conda-forge::cudnn
 conda install conda-forge::libcufft
 conda install conda-forge::cuda-cudart
@@ -105,38 +107,39 @@ Additionally, you need to have the models in a local folder an a configuration f
 }
 ```
 
-
-
-```
-python src/tree_eyed/tree_eyed_app.py --config config.json 
-```
+To execute the inference call `tree_eyed_app.py`, for example:
 
 ```
-conda env create -f environment.yml
+python src/tree_eyed/tree_eyed_app.py --config example_config.json 
 ```
+
+
 
 ## Docker image
 
-You can also use TreeEyed 
+You can also use TreeEyed as a docker container.
+First build the docker image:
 
 ```
 docker build -t treeeyed-image .
 ```
 
+Run the container interactively:
 
 ```
-docker run --gpus all -v D:/local_mydata/treeeyed_tests/docker:/app/data -v D:/local_mydata/models/treeeyed2:/app/models -it treeeyed-image
+docker run --gpus all -v <path-to-local-workspace-folder>:/app/data -v <path-to-local-models-folder>:/app/models -it treeeyed-image
 ```
+Execute inference:
 
 ```
-python src/tree_eyed/tree_eyed_app.py --config /app/data/example_01.json 
+python src/tree_eyed/tree_eyed_app.py --config /app/data/example_config.json 
 ```
 
 ## Updates
 
 ### V0.2.0
 
-- [X] Migration to ONNX format and ONNX runtime for all modles
+- [X] Migration to ONNX format and ONNX runtime for all models
 - [X] Reduced dependencies installation, improved installation feedback
 - [X] Added VHRTrees Model
 - [X] Added Custom ONNX model
@@ -161,11 +164,12 @@ python src/tree_eyed/tree_eyed_app.py --config /app/data/example_01.json
 
 Planned improvements for TreeEyed include:
 
-- [ ] Human-in-the-loop correction, merging, nms.
+- [ ] Worflow for Human-in-the-loop inference correction, merging, non-max suppression, dataset export.
 - [ ] Analsys export.
 - [ ] Integration of additional AI models for tree monitoring.
 - [ ] Support for state-of-the-art models such as DinoV3.
 - [ ] Tree zonification features for spatial analysis.
+- [ ] Tree changes analysis.
 - [ ] Carbon stock estimation tools.
 
 Stay updated with progress and new features in the [documentation](https://treeeyed.readthedocs.io/en/latest/) and on the [GitHub repository](https://github.com/your-repo/treeeyed).
