@@ -13,3 +13,5 @@ dependencies:
       - pycocotools==2.0.8
       - PySide6==6.9.2
       - shapely==2.0.6
+      - pandas==2.2.2
+      - numpy==1.26.4

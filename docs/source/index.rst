@@ -10,6 +10,18 @@
 
    <p align="center">
       <h1 align="center">TreeEyed QGIS Plugin</h1>
+      <div style="text-align:center;margin:20px 0;">
+         <a href="https://discord.gg/cXZhWgfqt2" target="_blank" style="text-decoration:none;">
+            <button style="background-color:#5865F2;color:white;padding:10px 24px;border:none;border-radius:6px;font-size:16px;cursor:pointer;margin-right:10px;">
+               Join Discord
+            </button>
+         </a>
+         <a href="https://github.com/afruizh/TreeEyed/releases/tag/v0.2.0" target="_blank" style="text-decoration:none;">
+            <button style="background-color:#43b581;color:white;padding:10px 24px;border:none;border-radius:6px;font-size:16px;cursor:pointer;">
+               Download Plugin
+            </button>
+         </a>
+      </div>
    </p>
 
 Home
@@ -19,7 +31,10 @@ Home
 TreeEyed QGIS Plugin
 ======================
 
+**Version:** 0.2.0
+
 TreeEyed is a QGIS plugin to leverage AI models for tree monitoring using remote sensing imagery.
+
 
 .. raw:: html
 
@@ -49,7 +64,11 @@ Acknowledgment
 This work is being carried out as part of the CGIAR Initiatives and Funded Projects. CGIAR is a global research partnership for a food-secure future. Its science is carried out by 15 Research Centers in close collaboration with hundreds of partners across the globe.
 
 TreeEyed is an open source project, and we welcome contributions and feedback from the community.  
-We would like to extend our gratitude to the developers and maintainers of the libraries and models integrated into this plugin
+We would like to extend our gratitude to the developers and maintainers of the libraries and models integrated into this plugin:
+
+* `HighResCanopyHeight <https://github.com/facebookresearch/HighResCanopyHeight>`_
+* `DeepForest <https://github.com/weecology/DeepForest>`_
+* `VHRTrees <https://github.com/RSandAI/VHRTrees>`_
 
 ==================
 Authors
@@ -90,6 +109,12 @@ Research
 ----
 
 ==================
+References
+==================
+
+
+
+==================
 Contents
 ==================
 
@@ -120,6 +145,13 @@ Contents
    examples/example_1
    examples/example_2
    examples/example_3
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Developers
+
+   developers/developers
+
 
 .. .. toctree::
 ..    :maxdepth: 2

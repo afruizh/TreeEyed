@@ -9,3 +9,10 @@ The following example shows the inference process on an **RGB raster image** to 
    <div style="text-align:center;width:100%;">
       <iframe  width="560" height="315" src="https://www.youtube.com/embed/QnMAEX6qkGU?si=7wMHSbk9K2zPT-sY" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
    </div>
+
+============================================
+Simple Inference QGIS Processing Algorithms
+============================================
+You can use the **Simple Inference** interface to perform inference porcessing for a whole layer.
+
+.. image:: ../res/gui/simple_inference_gui.png

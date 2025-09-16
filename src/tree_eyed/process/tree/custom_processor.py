@@ -130,6 +130,9 @@ def tile_raster_gdal(input_raster_path, tiles_dir, tile_size, prefix="", progres
                 
                 # Create padded array if tile is smaller than tile_size
                 if x_size < tile_size or y_size < tile_size:
+                    if np.issubdtype(data.dtype, np.unsignedinteger) and nodata_value < 0:
+                        # For uint8, use 0 or 255 as nodata
+                        nodata_value = 255
                     padded_data = np.full((tile_size, tile_size), nodata_value, dtype=data.dtype)
                     padded_data[:y_size, :x_size] = data
                     data = padded_data

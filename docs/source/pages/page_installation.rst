@@ -5,7 +5,7 @@ Installation
 Requirements
 ============
 You need to have installed `QGIS <https://www.qgis.org>`_ in your computer.
-This plugin was tested on Windows using QGIS 3.28.9-Firenze.
+This plugin was tested on Windows.
 
 .. csv-table:: QGIS versions and operating systems tested
    :file: ../res/qgis_versions.csv
@@ -34,10 +34,10 @@ Required additional packages
 
 This plugin requires additional python packages that can be installed by using the plugin and following the instructions:
 
-* rasterio
-* pycocotools
 * opencv-python
 * onnxruntime-gpu
+* pycocotools
+* gdown
 
 A **dependencies** folder with the required packages will be added in the plugin root folder.
 
