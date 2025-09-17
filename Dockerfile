@@ -26,15 +26,7 @@ ENV PATH=/opt/conda/bin:$PATH
 COPY environment.yml ./
 RUN conda env create -f environment.yml
 
-# Set shell to use conda environment by default
-SHELL ["conda", "run", "-n", "tree_eyed", "/bin/bash", "-c"]
-
-
 # Copy TreeEyed source code
 COPY src/ ./src/
 
-# Set environment variables if needed
-# ENV PYTHONPATH=/app/src
-
-# Default command to run tree_eyed_app.py
-#CMD ["python", "src/tree_eyed/tree_eyed_app.py"]
+CMD ["bash", "--init-file", "/opt/conda/etc/profile.d/conda.sh"]

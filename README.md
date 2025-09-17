@@ -132,6 +132,7 @@ docker run --gpus all -v <path-to-local-workspace-folder>:/app/data -v <path-to-
 Execute inference:
 
 ```
+conda activate tree_eyed
 python src/tree_eyed/tree_eyed_app.py --config /app/data/example_config.json 
 ```
 
