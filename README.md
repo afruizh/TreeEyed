@@ -31,13 +31,27 @@ Available models:
 
 TreeEyed plugin is now available directly in the [QGIS Python Plugins Repository](https://plugins.qgis.org/plugins/tree_eyed/) and can be installed using the plugin manager in QGIS.
 
+
+
 ### Plugin Installation
+
+#### Windows
 
 ![Plugin Install](res/installation.gif)
 
 
 > ⚠️ **Important:** You must restart QGIS after installing plugin dependencies for the changes to take effect.
 
+#### Linux
+
+You need to install the QGIS environment with the required dependencies:
+
+```
+conda env create -f environment-qgis.yml
+conda activate tree_eyed_qgis
+qgis
+```
+And then install the plugin from the repository.
 
 ### Download Models
 

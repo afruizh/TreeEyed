@@ -1,0 +1,20 @@
+name: tree_eyed_qgis
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - qgis
+  - gdal
+  - pyqt
+  - cudnn
+  - libcufft
+  - cuda-cudart
+  - pip
+  - pip:
+      - opencv-python-headless==4.11.0.86
+      - gdown==5.2.0
+      - onnxruntime-gpu==1.22.0
+      - pycocotools==2.0.8
+      - shapely==2.0.6
+      - pandas==2.2.2
+      - numpy==1.26.4
