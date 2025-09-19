@@ -8,21 +8,38 @@
 
 .. raw:: html
 
-   <p align="center">
-      <h1 align="center">TreeEyed QGIS Plugin</h1>
-      <div style="text-align:center;margin:20px 0;">
-         <a href="https://discord.gg/cXZhWgfqt2" target="_blank" style="text-decoration:none;">
-            <button style="background-color:#5865F2;color:white;padding:10px 24px;border:none;border-radius:6px;font-size:16px;cursor:pointer;margin-right:10px;">
-               Join Discord
-            </button>
-         </a>
-         <a href="https://github.com/afruizh/TreeEyed/releases/tag/v0.2.0" target="_blank" style="text-decoration:none;">
-            <button style="background-color:#43b581;color:white;padding:10px 24px;border:none;border-radius:6px;font-size:16px;cursor:pointer;">
-               Download Plugin
-            </button>
-         </a>
-      </div>
-   </p>
+   <div align="center">
+   
+   <a href="https://github.com/afruizh/TreeEyed/releases/tag/v0.2.0">
+      <img src="https://img.shields.io/badge/Download-Latest%20Release-brightgreen.svg?logo=github" alt="Download Latest Release">
+   </a>
+   <a href="https://treeeyed.readthedocs.io/en/latest/">
+      <img src="https://img.shields.io/badge/Docs-Read%20The%20Docs-blue.svg?logo=readthedocs" alt="Documentation">
+   </a>
+   <a href="https://discord.gg/cXZhWgfqt2">
+      <img src="https://img.shields.io/badge/Discord-Join%20Community-7289da.svg?logo=discord&logoColor=white" alt="Discord">
+   </a>
+   
+   </div>
+
+.. raw:: html
+
+   <div align="center">
+   
+   <a href="https://python.org">
+      <img src="https://img.shields.io/badge/Python-3.11-blue.svg" alt="Python">
+   </a>
+   <a href="https://qgis.org">
+      <img src="https://img.shields.io/badge/QGIS-Compatible-green.svg" alt="QGIS">
+   </a>
+   <a href="LICENSE">
+      <img src="https://img.shields.io/badge/License-Apache%202.0-orange.svg" alt="License">
+   </a>
+   <a href="https://onnxruntime.ai">
+      <img src="https://img.shields.io/badge/ONNX-Runtime-red.svg" alt="ONNX">
+   </a>
+   
+   </div>
 
 Home
 ======

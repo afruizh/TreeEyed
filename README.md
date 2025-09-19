@@ -1,11 +1,23 @@
 <p align="center">
   <img src="res/Banner TreeEyed.png" alt="banner">
-  <h1 align="center">TreeEyed QGIS Plugin version 0.2.0</h1>
-  <p align=center><a href="https://github.com/afruizh/TreeEyed/releases/tag/v0.2.0">Download latest release</a></a>
-  <p align=center><a href="https://treeeyed.readthedocs.io/en/latest/">Documentation</a></a>
-  <p align=center><a href="https://discord.gg/cXZhWgfqt2">Discord</a></a>
+  <h1 align="center">TreeEyed QGIS Plugin</h1> 
 </p>
 
+<div align="center">
+
+ [![GitHub release](https://img.shields.io/github/v/release/afruizh/TreeEyed.svg)](https://github.com/afruizh/TreeEyed/releases)
+[![Download](https://img.shields.io/badge/Download-Latest%20Release-brightgreen.svg?logo=github)](https://github.com/afruizh/TreeEyed/releases/tag/v0.2.0)
+[![Documentation](https://img.shields.io/badge/Docs-Read%20The%20Docs-blue.svg?logo=readthedocs)](https://treeeyed.readthedocs.io/en/latest/)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Community-7289da.svg?logo=discord&logoColor=white)](https://discord.gg/cXZhWgfqt2)
+
+</div>
+
+
+[![QGIS](https://img.shields.io/badge/QGIS-Compatible-green.svg)](https://qgis.org)
+[![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
+[![ONNX](https://img.shields.io/badge/ONNX-Runtime-red.svg)](https://onnxruntime.ai)
+[![GitHub stars](https://img.shields.io/github/stars/afruizh/TreeEyed.svg?style=social)](https://github.com/afruizh/TreeEyed/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/afruizh/TreeEyed.svg?style=social)](https://github.com/afruizh/TreeEyed/network)
 
 A QGIS plugin for tree monitoring using AI.
 
@@ -190,7 +202,7 @@ Planned improvements for TreeEyed include:
 Stay updated with progress and new features in the [documentation](https://treeeyed.readthedocs.io/en/latest/) and on the [GitHub repository](https://github.com/your-repo/treeeyed).
 
 ## License
-This repository is licensed under the Apache 2.0 license.
+This project is licensed under the **Apache License 2.0** - see the [LICENSE](LICENSE) file for details.
 
 ## Contribution
 
